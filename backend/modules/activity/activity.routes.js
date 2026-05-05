@@ -1,7 +1,10 @@
 const express = require('express');
 const activityController = require('./activity.controller');
+const authMiddleware = require('../../middlewares/authMiddleware');
 
 const router = express.Router();
+
+router.use(authMiddleware);
 
 router.post('/', activityController.createActivity);
 router.get('/', activityController.getActivities);

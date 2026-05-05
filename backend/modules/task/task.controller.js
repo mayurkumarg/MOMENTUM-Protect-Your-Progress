@@ -1,7 +1,5 @@
 const taskService = require('./task.service');
 
-const MOCK_USER_ID = '665f1f1f1f1f1f1f1f1f1f1f';
-
 const sendSuccess = (res, statusCode, data) => {
   res.status(statusCode).json({
     success: true,
@@ -11,7 +9,7 @@ const sendSuccess = (res, statusCode, data) => {
 
 const createTask = async (req, res, next) => {
   try {
-    const task = await taskService.createTask(MOCK_USER_ID, req.body);
+    const task = await taskService.createTask(req.user.userId, req.body);
     sendSuccess(res, 201, task);
   } catch (error) {
     next(error);
@@ -20,7 +18,7 @@ const createTask = async (req, res, next) => {
 
 const getTasks = async (req, res, next) => {
   try {
-    const tasks = await taskService.getTasks(MOCK_USER_ID, req.query);
+    const tasks = await taskService.getTasks(req.user.userId, req.query);
     sendSuccess(res, 200, tasks);
   } catch (error) {
     next(error);
@@ -29,7 +27,7 @@ const getTasks = async (req, res, next) => {
 
 const getTaskById = async (req, res, next) => {
   try {
-    const task = await taskService.getTaskById(MOCK_USER_ID, req.params.id);
+    const task = await taskService.getTaskById(req.user.userId, req.params.id);
     sendSuccess(res, 200, task);
   } catch (error) {
     next(error);
@@ -38,7 +36,7 @@ const getTaskById = async (req, res, next) => {
 
 const updateTask = async (req, res, next) => {
   try {
-    const task = await taskService.updateTask(MOCK_USER_ID, req.params.id, req.body);
+    const task = await taskService.updateTask(req.user.userId, req.params.id, req.body);
     sendSuccess(res, 200, task);
   } catch (error) {
     next(error);
@@ -47,7 +45,7 @@ const updateTask = async (req, res, next) => {
 
 const deleteTask = async (req, res, next) => {
   try {
-    const task = await taskService.deleteTask(MOCK_USER_ID, req.params.id);
+    const task = await taskService.deleteTask(req.user.userId, req.params.id);
     sendSuccess(res, 200, task);
   } catch (error) {
     next(error);
