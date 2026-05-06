@@ -3,22 +3,39 @@
   "name": "Momentum - Task Manager",
   "version": "1.0.0",
   "description": "Task management extension with GitHub OAuth",
+
   "permissions": [
     "identity",
-    "storage"
+    "storage",
+    "activeTab"
   ],
+
   "host_permissions": [
-    "http://localhost:5000/*"
+    "http://localhost:5000/*",
+    "https://leetcode.com/*",
+    "https://*.geeksforgeeks.org/*"
   ],
+
   "background": {
     "service_worker": "background.js"
   },
+
   "content_scripts": [
     {
       "matches": ["http://localhost:3000/*"],
       "js": ["content.js"]
+    },
+    {
+      "matches": [
+        "https://leetcode.com/problems/*",
+        "https://practice.geeksforgeeks.org/problems/*",
+        "https://www.geeksforgeeks.org/problems/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
     }
   ],
+
   "action": {
     "default_popup": "popup.html",
     "default_title": "Momentum"

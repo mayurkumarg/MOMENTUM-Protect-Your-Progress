@@ -1,4 +1,11 @@
+console.log('🔥 Background script started');
 const BACKEND_AUTH_URL = 'http://localhost:5000/api/auth/github';
+
+// Universal message logger to help debug delivery
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('📩 Message received:', message);
+  return true;
+});
 
 function performOAuth() {
   chrome.identity.launchWebAuthFlow(
@@ -116,5 +123,54 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
+// Listen for PROBLEM_SOLVED messages from content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'PROBLEM_SOLVED') {
+    console.log('🔥 PROBLEM_SOLVED received:', message.data);
 
+    sendToBackend(message.data)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((err) => {
+        console.error('❌ Error sending:', err);
+        sendResponse({ success: false });
+      });
+
+    return true; // keep the message channel open for async response
+  }
+});
+
+// Send solved problem to backend API
+async function sendToBackend(data) {
+  try {
+    const stored = await new Promise((resolve) =>
+      chrome.storage.local.get('token', resolve)
+    );
+
+    if (!stored.token) {
+      console.error('❌ No token found — user is not logged in. DSA activity not saved.');
+      return;
+    }
+
+    const res = await fetch('http://localhost:5000/api/dsa/activity', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${stored.token}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    const result = await res.json();
+
+    if (res.ok) {
+      console.log('✅ DSA activity saved successfully:', result);
+    } else {
+      console.error(`❌ Backend returned ${res.status}:`, result.message || result);
+    }
+  } catch (error) {
+    console.error('❌ Network/fetch error — is the backend running?', error);
+  }
+}
 
