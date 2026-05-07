@@ -1,11 +1,15 @@
 console.log('🔥 Background script started');
+
+// ── Import reliability modules (must be top-level in MV3 service worker) ──
+importScripts('background/logger.js');
+importScripts('background/activityQueue.js');
+importScripts('background/activityManager.js');
+
 const BACKEND_AUTH_URL = 'http://localhost:5000/api/auth/github';
 
-// Universal message logger to help debug delivery
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('📩 Message received:', message);
-  return true;
-});
+// ═══════════════════════════════════════════════════════════════════════
+// OAUTH FLOW — COMPLETELY UNTOUCHED
+// ═══════════════════════════════════════════════════════════════════════
 
 function performOAuth() {
   chrome.identity.launchWebAuthFlow(
@@ -93,7 +97,10 @@ function notifyPopup(message) {
   });
 }
 
-// Listen for messages from popup
+// ═══════════════════════════════════════════════════════════════════════
+// MESSAGE LISTENERS — POPUP ACTIONS (UNTOUCHED)
+// ═══════════════════════════════════════════════════════════════════════
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'PERFORM_OAUTH') {
     performOAuth();
@@ -116,61 +123,50 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Listen for storage changes
+// ═══════════════════════════════════════════════════════════════════════
+// STORAGE CHANGE LISTENER (UNTOUCHED)
+// ═══════════════════════════════════════════════════════════════════════
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.token) {
     console.log('Token updated in storage');
   }
 });
 
-// Listen for PROBLEM_SOLVED messages from content scripts
+// ═══════════════════════════════════════════════════════════════════════
+// ACTIVITY PIPELINE — Delegates to ActivityManager
+// ═══════════════════════════════════════════════════════════════════════
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PROBLEM_SOLVED') {
-    console.log('🔥 PROBLEM_SOLVED received:', message.data);
+    MomentumLogger.info('PROBLEM_SOLVED received:', message.data.problemTitle);
 
-    sendToBackend(message.data)
-      .then(() => {
-        sendResponse({ success: true });
+    ActivityManager.handleActivity(message.data)
+      .then((result) => {
+        sendResponse({ success: true, result });
       })
       .catch((err) => {
-        console.error('❌ Error sending:', err);
+        MomentumLogger.error('Activity handling failed:', err.message);
         sendResponse({ success: false });
       });
 
-    return true; // keep the message channel open for async response
+    return true; // keep message channel open for async response
   }
 });
 
-// Send solved problem to backend API
-async function sendToBackend(data) {
-  try {
-    const stored = await new Promise((resolve) =>
-      chrome.storage.local.get('token', resolve)
-    );
+// ═══════════════════════════════════════════════════════════════════════
+// QUEUE FLUSH — On startup + periodic alarm
+// ═══════════════════════════════════════════════════════════════════════
 
-    if (!stored.token) {
-      console.error('❌ No token found — user is not logged in. DSA activity not saved.');
-      return;
-    }
+// Flush on service worker startup
+ActivityManager.flushQueue();
 
-    const res = await fetch('http://localhost:5000/api/dsa/activity', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${stored.token}`,
-      },
-      body: JSON.stringify(data),
-    });
+// Periodic flush every 5 minutes
+chrome.alarms.create('momentumFlushQueue', { periodInMinutes: 5 });
 
-    const result = await res.json();
-
-    if (res.ok) {
-      console.log('✅ DSA activity saved successfully:', result);
-    } else {
-      console.error(`❌ Backend returned ${res.status}:`, result.message || result);
-    }
-  } catch (error) {
-    console.error('❌ Network/fetch error — is the backend running?', error);
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'momentumFlushQueue') {
+    MomentumLogger.debug('Alarm triggered — flushing queue');
+    ActivityManager.flushQueue();
   }
-}
-
+});

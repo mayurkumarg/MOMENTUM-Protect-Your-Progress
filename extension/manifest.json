@@ -7,7 +7,8 @@
   "permissions": [
     "identity",
     "storage",
-    "activeTab"
+    "activeTab",
+    "alarms"
   ],
 
   "host_permissions": [
@@ -31,7 +32,11 @@
         "https://practice.geeksforgeeks.org/problems/*",
         "https://www.geeksforgeeks.org/problems/*"
       ],
-      "js": ["content-script.js"],
+      "js": [
+        "platforms/leetcode.js",
+        "platforms/gfg.js",
+        "content-script.js"
+      ],
       "run_at": "document_idle"
     }
   ],
