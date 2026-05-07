@@ -1,5 +1,6 @@
 const activityService = require('./activity.service');
-const { ACTIVITY_SOURCE, ACTIVITY_TYPE } = require('./activity.model');
+const Activity = require('./activity.model');
+const { ACTIVITY_SOURCE, ACTIVITY_TYPE } = Activity;
 
 /**
  * DSA Activity Controller
@@ -7,6 +8,9 @@ const { ACTIVITY_SOURCE, ACTIVITY_TYPE } = require('./activity.model');
  * Handles incoming DSA problem-solved events from the browser extension.
  * Transforms the content-script payload (platform, problemTitle, url, solvedAt)
  * into the general Activity model format and persists it.
+ *
+ * Includes server-side duplicate prevention:
+ * same user + platform + problemTitle + same calendar day → 409 Conflict
  */
 
 const VALID_PLATFORMS = ['LeetCode', 'GFG'];
@@ -44,12 +48,33 @@ const createDsaActivity = async (req, res, next) => {
       });
     }
 
+    // ── Duplicate prevention ──────────────────────────────────────────
+    const startOfDay = new Date(parsedDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(parsedDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const existing = await Activity.findOne({
+      userId: req.user.userId,
+      source: ACTIVITY_SOURCE.DSA,
+      title: problemTitle,
+      'metadata.platform': platform,
+      activityDate: { $gte: startOfDay, $lte: endOfDay },
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: 'Duplicate activity — already recorded today.',
+      });
+    }
+
     // ── Map to Activity model fields ──────────────────────────────────
     const activityData = {
       source: ACTIVITY_SOURCE.DSA,
       activityType: ACTIVITY_TYPE.CODING,
       title: problemTitle,
-      durationMinutes: 1, // default — extension doesn't track time
+      durationMinutes: 1,
       activityDate: parsedDate,
       metadata: {
         platform,

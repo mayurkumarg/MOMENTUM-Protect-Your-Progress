@@ -81,6 +81,7 @@ const activitySchema = new Schema(
 activitySchema.index({ userId: 1, activityDate: -1 });
 activitySchema.index({ userId: 1, source: 1 });
 activitySchema.index({ userId: 1, activityType: 1 });
+activitySchema.index({ userId: 1, source: 1, title: 1, activityDate: -1 });
 
 module.exports = mongoose.models.Activity || mongoose.model('Activity', activitySchema);
 module.exports.ACTIVITY_SOURCE = ACTIVITY_SOURCE;
