@@ -10,6 +10,7 @@ const getApiBaseUrl = () => {
 
 let tokenProvider = () => localStorage.getItem(TOKEN_KEY)
 let unauthorizedHandler = () => {}
+let refreshHandler = null
 
 export class ApiError extends Error {
   constructor(message, { status, details } = {}) {
@@ -26,6 +27,10 @@ export function setTokenProvider(provider) {
 
 export function setUnauthorizedHandler(handler) {
   unauthorizedHandler = handler
+}
+
+export function setRefreshHandler(handler) {
+  refreshHandler = handler
 }
 
 export function getStoredToken() {
@@ -52,10 +57,35 @@ export function clearStoredAuth() {
 }
 
 function buildUrl(path, params) {
-  const url = new URL(`${getApiBaseUrl()}${path}`)
+  const baseUrl = getApiBaseUrl()
+  
+  // Validate baseUrl is not empty or invalid
+  if (!baseUrl) {
+    throw new Error('API base URL is not configured. Check VITE_API_BASE_URL environment variable.')
+  }
+  
+  // If baseUrl is relative (development mode), convert to absolute
+  let absoluteUrl = baseUrl
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    absoluteUrl = `${window.location.origin}${baseUrl}`
+  }
+  
+  // Build complete URL
+  const fullUrl = `${absoluteUrl}${path}`
+  
+  // Validate URL can be constructed
+  let url
+  try {
+    url = new URL(fullUrl)
+  } catch (err) {
+    throw new Error(`Invalid API URL: "${fullUrl}". Error: ${err.message}`)
+  }
+  
+  // Add query parameters
   Object.entries(params || {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value)
   })
+  
   return url.toString()
 }
 
@@ -70,33 +100,66 @@ async function parseResponse(response) {
   }
 }
 
+let isRefreshing = false
+let refreshPromise = null
+
+async function refreshAccessToken() {
+  if (isRefreshing) return refreshPromise
+
+  isRefreshing = true
+  refreshPromise = (async () => {
+    try {
+      if (!refreshHandler) return false
+      await refreshHandler()
+      return true
+    } catch {
+      return false
+    } finally {
+      isRefreshing = false
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
 export async function apiRequest(path, { method = 'GET', params, body, headers = {}, auth = true } = {}) {
-  const token = tokenProvider()
-  const response = await fetch(buildUrl(path, params), {
-    method,
-    headers: {
-      Accept: 'application/json',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  try {
+    const token = tokenProvider()
+    const url = buildUrl(path, params)
+    
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
 
-  const payload = await parseResponse(response)
+    const payload = await parseResponse(response)
 
-  if (!response.ok) {
-    const message = payload?.message || payload?.error || 'Momentum could not complete that request.'
-    const error = new ApiError(message, { status: response.status, details: payload })
+    if (!response.ok) {
+      if (response.status === 401 && auth) {
+        const refreshed = await refreshAccessToken()
+        if (refreshed) {
+          const newToken = tokenProvider()
+          return apiRequest(path, { method, params, body, headers, auth })
+        }
+        unauthorizedHandler(new ApiError('Unauthorized', { status: 401, details: payload }))
+      }
 
-    if (response.status === 401) {
-      unauthorizedHandler(error)
+      const message = payload?.message || payload?.error || 'Momentum could not complete that request.'
+      throw new ApiError(message, { status: response.status, details: payload })
     }
 
-    throw error
+    return payload?.success === true && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
+  } catch (err) {
+    if (err instanceof ApiError) throw err
+    throw new ApiError(err.message || 'Failed to make API request', { details: err })
   }
-
-  return payload?.success === true && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
 }
 
 export { getApiBaseUrl, TOKEN_KEY, REFRESH_TOKEN_KEY }
