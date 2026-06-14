@@ -1,12 +1,5 @@
 const axios = require('axios');
-
-class AppError extends Error {
-  constructor(message, statusCode = 500) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-  }
-}
+const AppError = require('../../utils/AppError');
 
 const exchangeCodeForToken = async (code) => {
   try {
@@ -16,6 +9,7 @@ const exchangeCodeForToken = async (code) => {
         client_id: process.env.GITHUB_CLIENT_ID,
         client_secret: process.env.GITHUB_CLIENT_SECRET,
         code,
+        redirect_uri: process.env.GITHUB_REDIRECT_URI,
       },
       {
         headers: {
@@ -24,12 +18,15 @@ const exchangeCodeForToken = async (code) => {
       }
     );
 
-    if (response.data.error) {
+    if (response.data.error || !response.data.access_token) {
       throw new AppError('Failed to exchange code for token', 401);
     }
 
     return response.data.access_token;
   } catch (error) {
+    if (error.isOperational) {
+      throw error;
+    }
     throw new AppError('GitHub authentication failed', 401);
   }
 };

@@ -1,4 +1,7 @@
 const authService = require('./auth.service');
+const { validateRegisterInput, validateLoginInput } = require('./auth.validation');
+
+const encodeRedirectParam = (value) => encodeURIComponent(value);
 
 const sendSuccess = (res, statusCode, data) => {
   res.status(statusCode).json({
@@ -7,25 +10,92 @@ const sendSuccess = (res, statusCode, data) => {
   });
 };
 
+// Register with email + password
+const register = async (req, res, next) => {
+  try {
+    const { email, username, password, confirmPassword } = req.body;
+
+    // Validate input
+    const { isValid, errors } = validateRegisterInput({ email, password, confirmPassword, username });
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
+    const user = await authService.registerUser(email, username, password);
+
+    return sendSuccess(res, 201, {
+      message: 'Registration successful',
+      user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Login with email + password
+const login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate input
+    const { isValid, errors } = validateLoginInput({ email, password });
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
+    const result = await authService.loginUser(email, password);
+
+    return sendSuccess(res, 200, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logout
+const logout = async (req, res, next) => {
+  try {
+    await authService.logoutUser(req.user.userId);
+
+    return sendSuccess(res, 200, {
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get GitHub OAuth URL
 const getGithubOAuthUrl = (req, res, next) => {
   try {
     const clientId = process.env.GITHUB_CLIENT_ID;
     const redirectUri = process.env.GITHUB_REDIRECT_URI;
     const scope = 'user:email';
+    const source = req.query.source === 'web' ? 'web' : 'extension';
+    const returnTo = req.query.returnTo || '';
 
-    // Support optional source query (e.g., ?source=extension)
-    const source = req.query.source;
+    console.log(`[AUTH] GitHub OAuth requested - source: ${source}, returnTo: ${returnTo}`);
 
-    // Include state when initiated by extension so callback can detect it
-    const state = source === 'extension' ? 'extension' : undefined;
+    if (!clientId || !redirectUri) {
+      return res.status(500).json({
+        success: false,
+        message: 'GitHub OAuth is not configured.',
+      });
+    }
 
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       scope,
+      state: JSON.stringify({ source, returnTo }),
     });
-
-    if (state) params.set('state', state);
 
     const githubOAuthUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
 
@@ -35,9 +105,10 @@ const getGithubOAuthUrl = (req, res, next) => {
   }
 };
 
+// GitHub OAuth callback
 const githubCallback = async (req, res, next) => {
   try {
-    const { code } = req.query;
+    const { code, state } = req.query;
 
     if (!code) {
       return res.status(400).json({
@@ -47,18 +118,77 @@ const githubCallback = async (req, res, next) => {
     }
 
     const result = await authService.githubLogin(code);
+    const parsedState = authService.parseOAuthState(state);
+    const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
+
+    if (parsedState.source === 'web') {
+      const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+      const callbackPath = parsedState.returnTo || '/overview';
+
+      let redirectUrl;
+      if (callbackPath.includes('?')) {
+        redirectUrl = `${clientUrl}${callbackPath}&${tokenParams}`;
+      } else {
+        redirectUrl = `${clientUrl}${callbackPath}?${tokenParams}`;
+      }
+
+      console.log(`[AUTH] Redirecting to web: ${redirectUrl}`);
+      return res.redirect(redirectUrl);
+    }
 
     const extensionId = process.env.EXTENSION_ID;
+    if (!extensionId) {
+      return res.status(500).json({
+        success: false,
+        message: 'Extension OAuth redirect is not configured.',
+      });
+    }
 
-    // Always redirect to extension chromiumapp URL with token
-    const extensionRedirect = `https://${extensionId}.chromiumapp.org/?token=${result.token}`;
+    const extensionRedirect = `https://${extensionId}.chromiumapp.org/?${tokenParams}`;
+    console.log(`[AUTH] Redirecting to extension: ${extensionRedirect}`);
     return res.redirect(extensionRedirect);
+  } catch (error) {
+    console.error(`[AUTH] Callback error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Get current user
+const me = async (req, res, next) => {
+  try {
+    const user = await authService.getAuthenticatedUser(req.user.userId);
+    return sendSuccess(res, 200, user);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Refresh access token
+const refresh = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token not provided',
+      });
+    }
+
+    const result = await authService.refreshAccessToken(refreshToken);
+
+    return sendSuccess(res, 200, result);
   } catch (error) {
     next(error);
   }
 };
 
 module.exports = {
+  register,
+  login,
+  logout,
   getGithubOAuthUrl,
   githubCallback,
+  me,
+  refresh,
 };

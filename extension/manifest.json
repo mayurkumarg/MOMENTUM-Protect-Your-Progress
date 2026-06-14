@@ -8,13 +8,19 @@
     "identity",
     "storage",
     "activeTab",
-    "alarms"
+    "alarms",
+    "tabs"
   ],
 
   "host_permissions": [
     "http://localhost:5000/*",
     "https://leetcode.com/*",
-    "https://*.geeksforgeeks.org/*"
+    "https://*.geeksforgeeks.org/*",
+    "https://codeforces.com/*",
+    "https://www.hackerrank.com/*",
+    "https://www.codechef.com/*",
+    "https://atcoder.jp/*",
+    "https://www.interviewbit.com/*"
   ],
 
   "background": {
@@ -30,11 +36,24 @@
       "matches": [
         "https://leetcode.com/problems/*",
         "https://practice.geeksforgeeks.org/problems/*",
-        "https://www.geeksforgeeks.org/problems/*"
+        "https://www.geeksforgeeks.org/problems/*",
+        "https://codeforces.com/problemset/problem/*",
+        "https://codeforces.com/contest/*/problem/*",
+        "https://codeforces.com/gym/*/problem/*",
+        "https://www.hackerrank.com/challenges/*",
+        "https://www.codechef.com/problems/*",
+        "https://www.codechef.com/submit/*",
+        "https://atcoder.jp/contests/*/tasks/*",
+        "https://www.interviewbit.com/problems/*"
       ],
       "js": [
         "platforms/leetcode.js",
         "platforms/gfg.js",
+        "platforms/codeforces.js",
+        "platforms/hackerrank.js",
+        "platforms/codechef.js",
+        "platforms/atcoder.js",
+        "platforms/interviewbit.js",
         "content-script.js"
       ],
       "run_at": "document_idle"

@@ -13,6 +13,7 @@
   const queue = self.ActivityQueue;
 
   const API_URL = 'http://localhost:5000/api/dsa/activity';
+  const REFRESH_URL = 'http://localhost:5000/api/auth/refresh';
   const COOLDOWN_MS = 30 * 1000;
   const MAX_RETRIES = 5;
   const RECENTLY_SENT_KEY = 'recentlySent';
@@ -21,6 +22,8 @@
 
   // In-memory dedup for current service worker session
   const sessionKeys = new Set();
+  let isRefreshing = false;
+  let refreshPromise = null;
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -71,25 +74,71 @@
   }
 
   async function getToken() {
-    const result = await chrome.storage.local.get('token');
-    return result.token || null;
+    const result = await chrome.storage.local.get(['accessToken', 'refreshToken']);
+    return {
+      accessToken: result.accessToken || null,
+      refreshToken: result.refreshToken || null,
+    };
+  }
+
+  async function refreshAccessToken() {
+    // Prevent multiple simultaneous refresh calls
+    if (isRefreshing) {
+      return refreshPromise;
+    }
+
+    isRefreshing = true;
+    refreshPromise = (async () => {
+      try {
+        const tokens = await getToken();
+        if (!tokens.refreshToken) {
+          throw new Error('NO_REFRESH_TOKEN');
+        }
+
+        const res = await fetch(REFRESH_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+        });
+
+        if (!res.ok) {
+          throw new Error('Token refresh failed');
+        }
+
+        const result = await res.json();
+        const newAccessToken = result.data.accessToken;
+
+        // Store new access token
+        await chrome.storage.local.set({ accessToken: newAccessToken });
+        log.info('Access token refreshed successfully');
+
+        return newAccessToken;
+      } finally {
+        isRefreshing = false;
+        refreshPromise = null;
+      }
+    })();
+
+    return refreshPromise;
   }
 
   // ── API Communication ───────────────────────────────────────────────
 
-  async function sendToAPI(data) {
+  async function sendToAPI(data, shouldRetryRefresh = true) {
     if (self.__momentumForceOffline) {
       throw new Error('FORCE_OFFLINE');
     }
 
-    const token = await getToken();
-    if (!token) throw new Error('NO_TOKEN');
+    const tokens = await getToken();
+    if (!tokens.accessToken) throw new Error('NO_TOKEN');
 
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${tokens.accessToken}`,
       },
       body: JSON.stringify(data),
     });
@@ -99,6 +148,19 @@
     if (res.status === 409) {
       log.info('Backend duplicate — already saved:', data.problemTitle);
       return result;
+    }
+
+    // Handle token expiration — try to refresh and retry
+    if (res.status === 401 && shouldRetryRefresh) {
+      log.warn('Access token expired, attempting refresh...');
+      try {
+        await refreshAccessToken();
+        // Retry with refreshed token (but don't refresh again to prevent infinite loops)
+        return await sendToAPI(data, false);
+      } catch (err) {
+        log.error('Token refresh failed:', err.message);
+        throw new Error(`HTTP ${res.status}: Invalid or expired token`);
+      }
     }
 
     if (!res.ok) {

@@ -38,11 +38,16 @@ console.log('[Momentum] Content script loaded');
   }
 
   function getAdapter() {
+    const platformKey = detectPlatform();
+    return platformKey ? platforms[platformKey] : null;
+  }
+
+  function detectPlatform() {
     const host = window.location.hostname;
     for (const key of Object.keys(platforms)) {
       const adapter = platforms[key];
       if (adapter && adapter.hostMatch && host.includes(adapter.hostMatch)) {
-        return adapter;
+        return key;
       }
     }
     return null;

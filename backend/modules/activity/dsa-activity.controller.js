@@ -13,7 +13,15 @@ const { ACTIVITY_SOURCE, ACTIVITY_TYPE } = Activity;
  * same user + platform + problemTitle + same calendar day → 409 Conflict
  */
 
-const VALID_PLATFORMS = ['LeetCode', 'GFG'];
+const VALID_PLATFORMS = [
+  'LeetCode',
+  'GFG',
+  'Codeforces',
+  'HackerRank',
+  'CodeChef',
+  'AtCoder',
+  'InterviewBit',
+];
 
 const createDsaActivity = async (req, res, next) => {
   try {

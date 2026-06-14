@@ -1,8 +1,8 @@
 // Utility to get token from storage
 function getTokenFromStorage() {
   return new Promise((resolve) => {
-    chrome.storage.local.get('token', (result) => {
-      resolve(result.token || null);
+    chrome.storage.local.get(['token', 'accessToken'], (result) => {
+      resolve(result.token || result.accessToken || null);
     });
   });
 }

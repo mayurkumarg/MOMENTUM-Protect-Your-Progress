@@ -13,72 +13,37 @@ function loginWithGitHub() {
   loginBtn.disabled = true;
   showStatus('Redirecting to GitHub...', 'loading');
 
-  chrome.identity.launchWebAuthFlow(
-    {
-      url: 'http://localhost:5000/api/auth/github',
-      interactive: true,
-    },
-    function (redirectUrl) {
-      if (chrome.runtime.lastError) {
-        console.error('OAuth error:', chrome.runtime.lastError);
-        showStatus(`Login error: ${chrome.runtime.lastError.message}`, 'error');
-        loginBtn.disabled = false;
-        return;
-      }
-
-      if (!redirectUrl) {
-        console.error('No redirect URL received');
-        showStatus('Login failed: no redirect URL', 'error');
-        loginBtn.disabled = false;
-        return;
-      }
-
-      try {
-        const url = new URL(redirectUrl);
-        const token = url.searchParams.get('token');
-        console.log('Extracted token:', token);
-
-        if (!token) {
-          console.error('Token not found in redirect URL');
-          showStatus('Login failed: token missing', 'error');
-          loginBtn.disabled = false;
-          return;
-        }
-
-        chrome.storage.local.set({ token }, () => {
-          console.log('Token stored successfully');
-          // decode minimal user info from JWT payload
-          try {
-            const parts = token.split('.');
-            if (parts.length === 3) {
-              const payload = JSON.parse(atob(parts[1]));
-              const user = { userId: payload.userId, githubId: payload.githubId };
-              chrome.storage.local.set({ user }, () => {
-                displayUserInfo(user);
-                showStatus('Logged in successfully!', 'success');
-                setTimeout(() => hideStatus(), 1500);
-                loginBtn.disabled = false;
-              });
-            } else {
-              // no user info available
-              showStatus('Logged in (no user info)', 'success');
-              setTimeout(() => hideStatus(), 1500);
-              loginBtn.disabled = false;
-            }
-          } catch (err) {
-            console.error('Error decoding token payload', err);
-            showStatus('Logged in', 'success');
-            setTimeout(() => hideStatus(), 1500);
-            loginBtn.disabled = false;
-          }
-        });
-      } catch (err) {
-        console.error('Error parsing redirect URL:', err);
-        showStatus('Login failed: invalid redirect', 'error');
-        loginBtn.disabled = false;
-      }
+  // Send message to background script to start OAuth flow
+  chrome.runtime.sendMessage({ action: 'PERFORM_OAUTH' }, (response) => {
+    if (!response || !response.success) {
+      showStatus('Failed to start login', 'error');
+      loginBtn.disabled = false;
     }
-  );
+  });
+
+  // Listen for login success/error messages from background script
+  const messageListener = (request) => {
+    if (request.action === 'LOGIN_SUCCESS') {
+      console.log('Login successful:', request.user);
+      displayUserInfo(request.user);
+      showStatus('Logged in successfully!', 'success');
+      setTimeout(() => hideStatus(), 1500);
+      loginBtn.disabled = false;
+      chrome.runtime.onMessage.removeListener(messageListener);
+    } else if (request.action === 'LOGIN_ERROR') {
+      console.error('Login error:', request.message);
+      showStatus(`Login error: ${request.message}`, 'error');
+      loginBtn.disabled = false;
+      chrome.runtime.onMessage.removeListener(messageListener);
+    }
+  };
+
+  chrome.runtime.onMessage.addListener(messageListener);
+
+  // Timeout after 5 minutes
+  setTimeout(() => {
+    chrome.runtime.onMessage.removeListener(messageListener);
+  }, 5 * 60 * 1000);
 }
 
 function handleLogout() {
@@ -103,8 +68,8 @@ function hideStatus() {
 }
 
 function checkAuthentication() {
-  chrome.storage.local.get(['user', 'token'], (result) => {
-    if (result.token && result.user) {
+  chrome.storage.local.get(['user', 'token', 'accessToken'], (result) => {
+    if ((result.token || result.accessToken) && result.user) {
       displayUserInfo(result.user);
     } else {
       showStatus('Login verification failed', 'error');
@@ -126,8 +91,8 @@ function displayUserInfo(user) {
 
 // Load user data on popup open
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.local.get(['user', 'token'], (result) => {
-    if (result.token && result.user) {
+  chrome.storage.local.get(['user', 'token', 'accessToken'], (result) => {
+    if ((result.token || result.accessToken) && result.user) {
       displayUserInfo(result.user);
     } else {
       loginBtn.disabled = false;

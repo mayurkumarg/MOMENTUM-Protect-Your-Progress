@@ -1,12 +1,5 @@
 const jwt = require('jsonwebtoken');
-
-class AppError extends Error {
-  constructor(message, statusCode = 500) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-  }
-}
+const AppError = require('../utils/AppError');
 
 const authMiddleware = (req, res, next) => {
   try {
@@ -20,9 +13,12 @@ const authMiddleware = (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    if (decoded.type === 'refresh') {
+      throw new AppError('Cannot use refresh token as access token', 401);
+    }
+
     req.user = {
       userId: decoded.userId,
-      githubId: decoded.githubId,
     };
 
     next();

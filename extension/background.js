@@ -8,68 +8,53 @@ importScripts('background/activityManager.js');
 const BACKEND_AUTH_URL = 'http://localhost:5000/api/auth/github';
 
 // ═══════════════════════════════════════════════════════════════════════
-// OAUTH FLOW — COMPLETELY UNTOUCHED
+// OAUTH FLOW
 // ═══════════════════════════════════════════════════════════════════════
 
-function performOAuth() {
+function performOAuth(sendResponse) {
   chrome.identity.launchWebAuthFlow(
     {
       url: BACKEND_AUTH_URL,
       interactive: true,
     },
-    function (redirectUrl) {
-      if (chrome.runtime.lastError) {
-        console.error('OAuth error:', chrome.runtime.lastError);
-        notifyPopup({
-          action: 'LOGIN_ERROR',
-          message: chrome.runtime.lastError.message,
-        });
+    (responseUrl) => {
+      if (chrome.runtime.lastError || !responseUrl) {
+        const message =
+          chrome.runtime.lastError?.message || 'Authorization did not complete.';
+        console.error('OAuth launch failed:', message);
+        notifyPopup({ action: 'LOGIN_ERROR', message });
+        sendResponse({ success: false, message });
         return;
       }
-
-      if (!redirectUrl) {
-        console.error('No redirect URL received');
-        notifyPopup({
-          action: 'LOGIN_ERROR',
-          message: 'No redirect URL received',
-        });
-        return;
-      }
-
-      console.log('Redirect URL:', redirectUrl);
 
       try {
-        const url = new URL(redirectUrl);
-        const token = url.searchParams.get('token');
+        const finalUrl = new URL(responseUrl);
+        const token = finalUrl.searchParams.get('token');
 
         if (!token) {
-          console.error('Token not found in redirect URL');
-          notifyPopup({
-            action: 'LOGIN_ERROR',
-            message: 'Token not found in redirect URL',
-          });
-          return;
+          throw new Error('Invalid response from server');
         }
 
-        // Decode JWT to get user info
         const user = decodeJWT(token);
 
-        chrome.storage.local.set({ token, user }, () => {
-          console.log('Token and user stored successfully');
-          notifyPopup({
-            action: 'LOGIN_SUCCESS',
-            user,
-          });
+        chrome.storage.local.set({ token, accessToken: token, user }, () => {
+          notifyPopup({ action: 'LOGIN_SUCCESS', user });
+          sendResponse({ success: true, user });
         });
       } catch (error) {
-        console.error('Error parsing redirect URL:', error);
-        notifyPopup({
-          action: 'LOGIN_ERROR',
-          message: 'Error parsing redirect URL',
-        });
+        const message = error.message || 'Authentication failed';
+        console.error('OAuth response handling failed:', error);
+        notifyPopup({ action: 'LOGIN_ERROR', message });
+        sendResponse({ success: false, message });
       }
     }
   );
+}
+
+function decodeBase64Url(value) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  return atob(padded);
 }
 
 function decodeJWT(token) {
@@ -79,7 +64,7 @@ function decodeJWT(token) {
       throw new Error('Invalid token format');
     }
 
-    const payload = JSON.parse(atob(parts[1]));
+    const payload = JSON.parse(decodeBase64Url(parts[1]));
     return {
       userId: payload.userId,
       githubId: payload.githubId,
@@ -98,50 +83,37 @@ function notifyPopup(message) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// MESSAGE LISTENERS — POPUP ACTIONS (UNTOUCHED)
+// UNIFIED MESSAGE HANDLER
 // ═══════════════════════════════════════════════════════════════════════
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Popup OAuth request
   if (request.action === 'PERFORM_OAUTH') {
-    performOAuth();
-    sendResponse({ success: true });
+    performOAuth(sendResponse);
     return true;
   }
 
+  // Token request
   if (request.action === 'GET_TOKEN') {
-    chrome.storage.local.get('token', (result) => {
-      sendResponse({ token: result.token || null });
+    chrome.storage.local.get(['token', 'accessToken'], (result) => {
+      sendResponse({ token: result.token || result.accessToken || null });
     });
     return true;
   }
 
+  // Logout request
   if (request.action === 'LOGOUT') {
-    chrome.storage.local.remove(['token', 'user'], () => {
+    chrome.storage.local.remove(['token', 'accessToken', 'refreshToken', 'user'], () => {
       sendResponse({ success: true });
     });
     return true;
   }
-});
 
-// ═══════════════════════════════════════════════════════════════════════
-// STORAGE CHANGE LISTENER (UNTOUCHED)
-// ═══════════════════════════════════════════════════════════════════════
+  // Activity pipeline
+  if (request.type === 'PROBLEM_SOLVED') {
+    MomentumLogger.info('PROBLEM_SOLVED received:', request.data.problemTitle);
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && changes.token) {
-    console.log('Token updated in storage');
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-// ACTIVITY PIPELINE — Delegates to ActivityManager
-// ═══════════════════════════════════════════════════════════════════════
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'PROBLEM_SOLVED') {
-    MomentumLogger.info('PROBLEM_SOLVED received:', message.data.problemTitle);
-
-    ActivityManager.handleActivity(message.data)
+    ActivityManager.handleActivity(request.data)
       .then((result) => {
         sendResponse({ success: true, result });
       })
@@ -151,6 +123,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
 
     return true; // keep message channel open for async response
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// STORAGE CHANGE LISTENER
+// ═══════════════════════════════════════════════════════════════════════
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local') {
+    if (changes.token) {
+      console.log('Token updated in storage');
+    }
+    if (changes.accessToken) {
+      console.log('Access token updated in storage');
+    }
+    if (changes.user) {
+      console.log('User info updated in storage');
+    }
   }
 });
 

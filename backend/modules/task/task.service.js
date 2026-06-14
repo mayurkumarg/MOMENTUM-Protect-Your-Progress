@@ -1,15 +1,8 @@
 const mongoose = require('mongoose');
 const Task = require('./task.model');
+const AppError = require('../../utils/AppError');
 
 const { TASK_STATUS } = Task;
-
-class AppError extends Error {
-  constructor(message, statusCode = 500) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-  }
-}
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
