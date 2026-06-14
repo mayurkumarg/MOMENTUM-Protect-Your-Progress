@@ -8,11 +8,16 @@ import Overview from './pages/Overview'
 import Settings from './pages/Settings'
 import Tasks from './pages/Tasks'
 import Timeline from './pages/Timeline'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import GitHubCallback from './pages/GitHubCallback'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginRoute />} />
+      <Route path="/login" element={<LoginRoute><Login /></LoginRoute>} />
+      <Route path="/register" element={<LoginRoute><Register /></LoginRoute>} />
+      <Route path="/auth/github/callback" element={<GitHubCallback />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/overview" replace />} />

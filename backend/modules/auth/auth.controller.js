@@ -111,10 +111,10 @@ const githubCallback = async (req, res, next) => {
     const { code, state } = req.query;
 
     if (!code) {
-      return res.status(400).json({
-        success: false,
-        message: 'Authorization code not provided',
-      });
+      console.error(`[AUTH] No authorization code provided`);
+      const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+      const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent('Authorization code not provided')}`;
+      return res.redirect(errorUrl);
     }
 
     const result = await authService.githubLogin(code);
@@ -138,10 +138,10 @@ const githubCallback = async (req, res, next) => {
 
     const extensionId = process.env.EXTENSION_ID;
     if (!extensionId) {
-      return res.status(500).json({
-        success: false,
-        message: 'Extension OAuth redirect is not configured.',
-      });
+      console.error(`[AUTH] Extension ID not configured`);
+      const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+      const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent('Extension OAuth is not configured')}`;
+      return res.redirect(errorUrl);
     }
 
     const extensionRedirect = `https://${extensionId}.chromiumapp.org/?${tokenParams}`;
@@ -149,7 +149,14 @@ const githubCallback = async (req, res, next) => {
     return res.redirect(extensionRedirect);
   } catch (error) {
     console.error(`[AUTH] Callback error: ${error.message}`);
-    next(error);
+    
+    // Redirect to login with error instead of sending JSON
+    const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const errorMessage = error.message || 'GitHub login failed';
+    const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent(errorMessage)}`;
+    
+    console.log(`[AUTH] Redirecting to login with error: ${errorUrl}`);
+    return res.redirect(errorUrl);
   }
 };
 

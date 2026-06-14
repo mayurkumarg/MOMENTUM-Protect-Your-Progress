@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { clearStoredAuth, getStoredRefreshToken, getStoredToken, setTokenProvider, setUnauthorizedHandler, storeRefreshToken, storeToken } from '../api/client'
-import { refreshToken as refreshAccessToken } from '../api/auth'
+import { clearStoredAuth, getStoredRefreshToken, getStoredToken, setTokenProvider, setUnauthorizedHandler, storeRefreshToken, storeToken, setRefreshHandler } from '../api/client'
+import { refreshToken as refreshAccessToken, getCurrentUser } from '../api/auth'
 import { getTokenUser, isTokenExpired } from './token'
 
 const AuthContext = createContext(null)
@@ -33,7 +33,14 @@ function readInitialAuth() {
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(() => ({ token: null, user: null, status: 'loading', reason: null }))
 
-  const setSession = useCallback((token, refreshToken) => {
+  const setSession = useCallback((sessionData) => {
+    if (!sessionData) {
+      clearStoredAuth()
+      setAuth({ token: null, user: null, status: 'unauthenticated', reason: 'cleared' })
+      return
+    }
+
+    const token = sessionData.accessToken || sessionData.token
     if (!token || isTokenExpired(token)) {
       clearStoredAuth()
       setAuth({ token: null, user: null, status: 'unauthenticated', reason: 'expired' })
@@ -41,8 +48,10 @@ export function AuthProvider({ children }) {
     }
 
     storeToken(token)
-    if (refreshToken) storeRefreshToken(refreshToken)
-    setAuth({ token, user: getTokenUser(token), status: 'authenticated', reason: null })
+    if (sessionData.refreshToken) storeRefreshToken(sessionData.refreshToken)
+    
+    const user = sessionData.user || getTokenUser(token)
+    setAuth({ token, user, status: 'authenticated', reason: null })
   }, [])
 
   const signOut = useCallback((reason = null) => {
@@ -59,13 +68,14 @@ export function AuthProvider({ children }) {
 
     const session = await refreshAccessToken(refreshToken)
     const nextToken = session.accessToken || session.token
-    setSession(nextToken, session.refreshToken)
+    setSession(session)
     return nextToken
   }, [setSession, signOut])
 
   useEffect(() => {
     setTokenProvider(() => getStoredToken())
     setUnauthorizedHandler(() => signOut('expired'))
+    setRefreshHandler(refreshSession)
     setAuth({ ...readInitialAuth(), reason: null })
 
     const onStorage = (event) => {
@@ -77,17 +87,42 @@ export function AuthProvider({ children }) {
 
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [signOut])
+  }, [signOut, refreshSession])
+
+  useEffect(() => {
+    if (auth.status !== 'loading') return
+
+    async function initializeAuth() {
+      const initial = readInitialAuth()
+      
+      if (initial.status === 'authenticated') {
+        try {
+          const userData = await getCurrentUser()
+          setAuth({ 
+            token: initial.token, 
+            user: userData, 
+            status: 'authenticated', 
+            reason: null 
+          })
+        } catch (err) {
+          console.error('Failed to fetch current user:', err)
+          setAuth(initial)
+        }
+      } else {
+        setAuth(initial)
+      }
+    }
+
+    initializeAuth()
+  }, [])
 
   useEffect(() => {
     if (!auth.token || auth.status !== 'authenticated') return undefined
 
-    const payload = getTokenUser(auth.token)
     const timer = setInterval(() => {
       if (isTokenExpired(auth.token)) signOut('expired')
     }, 30000)
 
-    if (!payload) return () => clearInterval(timer)
     return () => clearInterval(timer)
   }, [auth.token, auth.status, signOut])
 

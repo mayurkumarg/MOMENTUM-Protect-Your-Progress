@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Activity, BarChart3, CalendarDays, CheckSquare2, CircleHelp, Command, LayoutGrid, Menu, MessageCircle, Plus, Settings, X } from 'lucide-react'
 import { Button, IconButton } from '../ui'
 import ThemeToggle from '../ThemeToggle'
-import { useAuth } from '../../auth/AuthProvider'
+import ProfileMenu from './ProfileMenu'
 
 const mainNav = [
   { to: '/overview', label: 'Overview', icon: LayoutGrid },
@@ -34,9 +34,6 @@ function NavItem({ item, onClick }) {
 }
 
 function Sidebar({ onNavigate }) {
-  const auth = useAuth()
-  const initials = auth.user?.githubId ? 'GH' : 'ME'
-
   return (
     <div className="flex h-full flex-col px-4 py-5">
       <div className="px-2"><Brand /></div>
@@ -46,17 +43,13 @@ function Sidebar({ onNavigate }) {
       </nav>
       <div className="mt-auto space-y-1 border-t border-line pt-4">
         <NavItem item={{ to: '/settings', label: 'Settings', icon: Settings }} onClick={onNavigate} />
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <button className="focus-ring flex h-10 min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted hover:bg-surface-subtle hover:text-ink"><CircleHelp size={17} />Help & feedback</button>
           <ThemeToggle className="size-9 shrink-0" />
         </div>
-        <div className="mt-3 flex items-center gap-3 px-3 py-2">
-          <div className="grid size-8 place-items-center rounded-full bg-coral-soft text-xs font-bold text-coral">{initials}</div>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-copy">Authenticated</p>
-            <p className="truncate text-[11px] text-faint">Personal workspace</p>
-          </div>
-        </div>
+      </div>
+      <div className="mt-3 px-1">
+        <ProfileMenu />
       </div>
     </div>
   )
