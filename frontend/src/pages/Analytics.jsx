@@ -1,7 +1,10 @@
 import { Activity, ArrowRight, BarChart3, CircleDot, GitCommitHorizontal } from 'lucide-react'
-import { Badge, Button, Card, EmptyState, PageHeader, Section, SetupPrompt } from '../components/ui'
+import { useNavigate } from 'react-router-dom'
+import { Button, Card, EmptyState, PageHeader, Section, SetupPrompt } from '../components/ui'
 
 export default function Analytics() {
+  const navigate = useNavigate()
+
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Understand" title="Analytics" description="Useful patterns about workload, consistency, and effort. No vanity metrics." />
@@ -16,7 +19,7 @@ export default function Analytics() {
         </div>
       </Section>
       <Section title="Insights">
-        <Card><EmptyState icon={BarChart3} title="No patterns to show yet" description="When there is enough reliable activity, clear and actionable observations will appear here." action={<Button variant="ghost">Learn about insights <ArrowRight size={15} /></Button>} /></Card>
+        <Card><EmptyState icon={BarChart3} title="No patterns to show yet" description="When there is enough reliable activity, clear and actionable observations will appear here." action={<Button variant="ghost" onClick={() => navigate('/activity')}>Learn about insights <ArrowRight size={15} /></Button>} /></Card>
       </Section>
     </div>
   )

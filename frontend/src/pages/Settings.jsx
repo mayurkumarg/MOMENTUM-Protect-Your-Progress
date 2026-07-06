@@ -1,5 +1,5 @@
 import { Bell, Github, Palette, Plug, UserRound } from 'lucide-react'
-import { Badge, Button, Card, Input, PageHeader, Section } from '../components/ui'
+import { Button, Card, Input, PageHeader, Section } from '../components/ui'
 import ThemeSelector from '../components/ThemeSelector'
 import { getGithubLoginUrl } from '../api/auth'
 import { useAuth } from '../auth/AuthProvider'
@@ -11,6 +11,18 @@ function SettingRow({ icon: Icon, title, description, children }) {
 export default function Settings() {
   const auth = useAuth()
 
+  const handleConfigureReminders = () => {
+    alert('Reminders configuration is coming soon. This feature will allow you to set up gentle prompts for planned work and reviews.')
+  }
+
+  const handleInstallExtension = () => {
+    alert('Browser extension installation is coming soon. You will be able to track DSA practice from supported coding platforms directly from the Momentum dashboard.')
+  }
+
+  const handleGithubConnect = () => {
+    window.location.href = getGithubLoginUrl()
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Workspace" title="Settings" description="Shape Momentum around the way you study and work." />
@@ -21,14 +33,14 @@ export default function Settings() {
           </Section>
           <Section title="Preferences">
             <Card>
-              <SettingRow icon={Bell} title="Reminders" description="Gentle prompts for planned work and reviews."><Button variant="secondary">Configure</Button></SettingRow>
+              <SettingRow icon={Bell} title="Reminders" description="Gentle prompts for planned work and reviews."><Button variant="secondary" onClick={handleConfigureReminders}>Configure</Button></SettingRow>
               <SettingRow icon={Palette} title="Appearance" description="Choose a comfortable workspace theme or follow your system."><ThemeSelector /></SettingRow>
             </Card>
           </Section>
           <Section title="Connections">
             <Card>
-              <SettingRow icon={Github} title="GitHub" description="Capture meaningful repository activity."><Button variant="secondary" onClick={() => { window.location.href = getGithubLoginUrl() }}>Connect</Button></SettingRow>
-              <SettingRow icon={Plug} title="Browser extension" description="Capture DSA practice from supported platforms."><Button variant="secondary">Install</Button></SettingRow>
+              <SettingRow icon={Github} title="GitHub" description="Capture meaningful repository activity."><Button variant="secondary" onClick={handleGithubConnect}>Connect</Button></SettingRow>
+              <SettingRow icon={Plug} title="Browser extension" description="Capture DSA practice from supported platforms."><Button variant="secondary" onClick={handleInstallExtension}>Install</Button></SettingRow>
             </Card>
           </Section>
         </div>

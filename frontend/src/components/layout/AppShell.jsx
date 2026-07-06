@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Activity, BarChart3, CalendarDays, CheckSquare2, CircleHelp, Command, LayoutGrid, Menu, MessageCircle, Plus, Settings, X } from 'lucide-react'
 import { Button, IconButton } from '../ui'
 import ThemeToggle from '../ThemeToggle'
@@ -44,7 +44,7 @@ function Sidebar({ onNavigate }) {
       <div className="mt-auto space-y-1 border-t border-line pt-4">
         <NavItem item={{ to: '/settings', label: 'Settings', icon: Settings }} onClick={onNavigate} />
         <div className="flex items-center gap-2">
-          <button className="focus-ring flex h-10 min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted hover:bg-surface-subtle hover:text-ink"><CircleHelp size={17} />Help & feedback</button>
+          <button onClick={() => { alert('Help & Feedback is coming soon.') }} className="focus-ring flex h-10 min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted hover:bg-surface-subtle hover:text-ink"><CircleHelp size={17} />Help & feedback</button>
           <ThemeToggle className="size-9 shrink-0" />
         </div>
       </div>
@@ -58,6 +58,7 @@ function Sidebar({ onNavigate }) {
 export default function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
   const pageName = [...mainNav, { to: '/settings', label: 'Settings' }].find((item) => item.to === location.pathname)?.label || 'Momentum'
 
   return (
@@ -77,7 +78,7 @@ export default function AppShell() {
           <IconButton icon={Menu} label="Open menu" onClick={() => setMenuOpen(true)} />
           <span className="font-display text-sm font-bold">{pageName}</span>
         </div>
-        <Button icon={Plus} className="h-9 px-3">Add task</Button>
+        <Button icon={Plus} className="h-9 px-3" onClick={() => navigate('/tasks')}>Add task</Button>
       </header>
       <main className="pb-24 lg:ml-[232px] lg:pb-0">
         <div className="mx-auto max-w-[1440px] px-4 py-7 sm:px-7 sm:py-9 xl:px-10">

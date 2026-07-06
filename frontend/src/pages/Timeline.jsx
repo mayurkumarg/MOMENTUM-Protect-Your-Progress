@@ -1,4 +1,6 @@
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Code2, ListPlus, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button, Card, EmptyState, ErrorState, IconButton, LoadingState, PageHeader, Section } from '../components/ui'
 import { useTimeline } from '../hooks/useTimeline'
 import { formatDateTime, formatMinutes } from '../utils/format'
@@ -28,15 +30,30 @@ function TimelineItem({ item }) {
 }
 
 export default function Timeline() {
+  const navigate = useNavigate()
   const { items, isLoading, error, refetch } = useTimeline()
+  const [weekOffset, setWeekOffset] = useState(0)
+  
   const weekLabel = new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date())
+
+  const handleScheduleWork = () => {
+    navigate('/tasks')
+  }
+
+  const handlePreviousWeek = () => {
+    setWeekOffset(weekOffset - 1)
+  }
+
+  const handleNextWeek = () => {
+    setWeekOffset(weekOffset + 1)
+  }
 
   return (
     <div className="space-y-8">
-      <PageHeader eyebrow="See the week" title="Timeline" description="Understand how planned work and real effort fit across your time." actions={<Button icon={Plus}>Schedule work</Button>} />
+      <PageHeader eyebrow="See the week" title="Timeline" description="Understand how planned work and real effort fit across your time." actions={<Button icon={Plus} onClick={handleScheduleWork}>Schedule work</Button>} />
       <div className="flex items-center justify-between">
         <div><p className="text-sm font-semibold">{weekLabel}</p><p className="text-xs text-faint">Chronological feed from backend data</p></div>
-        <div className="flex gap-1"><IconButton icon={ChevronLeft} label="Previous week" /><IconButton icon={CalendarDays} label="Choose week" /><IconButton icon={ChevronRight} label="Next week" /></div>
+        <div className="flex gap-1"><IconButton icon={ChevronLeft} label="Previous week" onClick={handlePreviousWeek} /><IconButton icon={CalendarDays} label="Choose week" /><IconButton icon={ChevronRight} label="Next week" onClick={handleNextWeek} /></div>
       </div>
       <Section title="Unified timeline" description="Tasks and captured coding activity, sorted by time.">
         {isLoading ? (
