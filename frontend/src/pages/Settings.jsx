@@ -1,6 +1,6 @@
 import { Bell, Github, Palette, Plug, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, Input, PageHeader, Section } from '../components/ui'
+import { Badge, Button, Card, Input, PageHeader, Section } from '../components/ui'
 import ThemeSelector from '../components/ThemeSelector'
 import { getGithubLoginUrl } from '../api/auth'
 import { useAuth } from '../auth/AuthProvider'
@@ -50,7 +50,7 @@ export default function Settings() {
               <SettingRow icon={Github} title="GitHub" description="Capture meaningful repository activity."><Button variant="secondary" onClick={handleGithubConnect}>Connect</Button></SettingRow>
               <SettingRow icon={Plug} title="Browser extension" description="Capture DSA practice from supported platforms.">
                 {extension.isConnected ? (
-                  <Button variant="ghost" className="pointer-events-none text-green-600 font-semibold" disabled>Connected</Button>
+                  <Badge tone="green">Connected</Badge>
                 ) : extension.isInstalled ? (
                   <Button variant="secondary" onClick={handleInstallExtension}>Connect</Button>
                 ) : (

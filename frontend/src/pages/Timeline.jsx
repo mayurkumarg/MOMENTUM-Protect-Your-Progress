@@ -1,9 +1,22 @@
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Code2, ListPlus, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, EmptyState, ErrorState, IconButton, LoadingState, PageHeader, Section } from '../components/ui'
 import { useTimeline } from '../hooks/useTimeline'
 import { formatDateTime, formatMinutes } from '../utils/format'
+
+function getWeekRange(offset) {
+  const now = new Date()
+  const day = now.getDay() // 0 (Sun) .. 6 (Sat)
+  const diffToMonday = (day === 0 ? -6 : 1) - day
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(now.getDate() + diffToMonday + offset * 7)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
 
 const itemConfig = {
   'task-created': { icon: ListPlus, label: 'Task created', tone: 'border-yellow bg-yellow-soft text-yellow' },
@@ -33,8 +46,22 @@ export default function Timeline() {
   const navigate = useNavigate()
   const { items, isLoading, error, refetch } = useTimeline()
   const [weekOffset, setWeekOffset] = useState(0)
-  
-  const weekLabel = new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date())
+
+  const { start: weekStart, end: weekEnd } = useMemo(() => getWeekRange(weekOffset), [weekOffset])
+
+  const weekItems = useMemo(
+    () => items.filter((item) => {
+      const timestamp = new Date(item.timestamp)
+      return timestamp >= weekStart && timestamp <= weekEnd
+    }),
+    [items, weekStart, weekEnd]
+  )
+
+  const weekLabel = useMemo(() => {
+    const startFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
+    const endFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    return `${startFmt.format(weekStart)} – ${endFmt.format(weekEnd)}`
+  }, [weekStart, weekEnd])
 
   const handleScheduleWork = () => {
     navigate('/tasks')
@@ -60,10 +87,10 @@ export default function Timeline() {
           <Card><LoadingState label="Building timeline" /></Card>
         ) : error ? (
           <Card><ErrorState title="Timeline could not load" description={error.message} action={<Button variant="secondary" onClick={() => refetch().catch(() => {})}>Retry</Button>} /></Card>
-        ) : items.length ? (
-          <Card className="overflow-hidden">{items.map((item) => <TimelineItem key={item.id} item={item} />)}</Card>
+        ) : weekItems.length ? (
+          <Card className="overflow-hidden">{weekItems.map((item) => <TimelineItem key={item.id} item={item} />)}</Card>
         ) : (
-          <Card><EmptyState compact title="Your timeline is open" description="Create tasks or capture coding activity and Momentum will place them here in order." /></Card>
+          <Card><EmptyState compact title="Nothing this week" description="Create tasks or capture coding activity and Momentum will place them here in order." /></Card>
         )}
       </Section>
     </div>
