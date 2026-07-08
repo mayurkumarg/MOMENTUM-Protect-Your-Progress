@@ -1,10 +1,11 @@
-import { LoaderCircle, Plus, Sparkles } from 'lucide-react'
+import { LoaderCircle, Plus } from 'lucide-react'
 
 export function Button({ children, icon: Icon, variant = 'primary', className = '', ...props }) {
   const variants = {
     primary: 'bg-ink text-canvas hover:bg-accent hover:text-white',
     secondary: 'border border-line bg-surface text-copy hover:border-line-strong hover:bg-surface-subtle',
     ghost: 'text-muted hover:bg-surface-subtle hover:text-ink',
+    danger: 'bg-coral text-white hover:bg-coral/90',
   }
   return (
     <button className={`focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]} ${className}`} {...props}>
@@ -117,20 +118,5 @@ export function SegmentedControl({ options, value, onChange }) {
         </button>
       ))}
     </div>
-  )
-}
-
-export function SetupPrompt({ title, description, actionLabel = 'Set up connection' }) {
-  return (
-    <Card className="flex flex-col gap-4 border-l-4 border-l-coral p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 gap-3.5">
-        <div className="grid size-9 shrink-0 place-items-center rounded-md bg-coral-soft text-coral"><Sparkles size={17} /></div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-ink">{title}</h3>
-          <p className="mt-1 max-w-xl text-sm leading-5 text-muted">{description}</p>
-        </div>
-      </div>
-      <Button variant="secondary" className="shrink-0 self-start sm:self-auto">{actionLabel}</Button>
-    </Card>
   )
 }
