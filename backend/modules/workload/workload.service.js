@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Task = require('../task/task.model');
 const Activity = require('../activity/activity.model');
 const AppError = require('../../utils/AppError');
+const { DAY_MS, formatDateKey, computeCurrentStreakDays } = require('../../utils/dateStats');
 
 const { TASK_STATUS } = Task;
 
@@ -22,31 +23,6 @@ const THRESHOLDS = {
   DUE_SOON_DAYS: 3,
   LOOKBACK_DAYS: 14,
   STREAK_GOOD_DAYS: 3,
-};
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const startOfDay = (date) => {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-};
-
-// Counts the current run of consecutive days (ending today or yesterday) with at least one activity.
-const computeCurrentStreakDays = (activityDayKeys) => {
-  let streak = 0;
-  let cursor = startOfDay(new Date());
-
-  if (!activityDayKeys.has(cursor.toDateString())) {
-    cursor = new Date(cursor.getTime() - DAY_MS);
-  }
-
-  while (activityDayKeys.has(cursor.toDateString())) {
-    streak += 1;
-    cursor = new Date(cursor.getTime() - DAY_MS);
-  }
-
-  return streak;
 };
 
 const classifyWorkloadLevel = (totalEstimatedHours, openTasksCount) => {
@@ -96,9 +72,10 @@ const computeWorkloadSummary = async (userId) => {
   const dueSoonCount = openTasks.filter((task) => task.deadline >= now && task.deadline <= dueSoonCutoff).length;
   const totalEstimatedHours = openTasks.reduce((sum, task) => sum + (task.estimatedHours || 0), 0);
 
-  const activityDayKeys = new Set(recentActivity.map((activity) => startOfDay(activity.activityDate).toDateString()));
+  const activityDayKeys = new Set(recentActivity.map((activity) => formatDateKey(activity.activityDate)));
   const currentStreakDays = computeCurrentStreakDays(activityDayKeys);
-  const activeDaysLast7 = [...activityDayKeys].filter((key) => new Date(key) >= startOfDay(sevenDaysAgo)).length;
+  const sevenDaysAgoKey = formatDateKey(sevenDaysAgo);
+  const activeDaysLast7 = [...activityDayKeys].filter((key) => key >= sevenDaysAgoKey).length;
 
   const workloadLevel = classifyWorkloadLevel(totalEstimatedHours, openTasks.length);
   const scheduleTightness = classifyScheduleTightness(overdueTasksCount, dueSoonCount);
