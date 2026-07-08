@@ -1,4 +1,5 @@
 const loginBtn = document.getElementById('loginBtn');
+const loginBtnLabel = loginBtn.querySelector('.btn-label');
 const logoutBtn = document.getElementById('logoutBtn');
 const loginSection = document.querySelector('.login-section');
 const userSection = document.querySelector('.user-section');
@@ -44,14 +45,20 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 loginBtn.addEventListener('click', loginWithGitHub);
 logoutBtn.addEventListener('click', handleLogout);
 
+function setLoginButtonLoading(isLoading) {
+  loginBtn.disabled = isLoading;
+  loginBtn.classList.toggle('is-loading', isLoading);
+  loginBtnLabel.textContent = isLoading ? 'Redirecting to GitHub…' : 'Login with GitHub';
+}
+
 function loginWithGitHub() {
-  loginBtn.disabled = true;
-  showStatus('Redirecting to GitHub...', 'loading');
+  setLoginButtonLoading(true);
+  showStatus('Waiting for GitHub authorization...', 'loading');
 
   chrome.runtime.sendMessage({ action: 'PERFORM_OAUTH' }, (response) => {
     if (!response || !response.success) {
       showStatus('Failed to start login', 'error');
-      loginBtn.disabled = false;
+      setLoginButtonLoading(false);
     }
   });
 
@@ -61,12 +68,12 @@ function loginWithGitHub() {
       displayUserInfo(request.user);
       showStatus('Logged in successfully!', 'success');
       setTimeout(() => hideStatus(), 1500);
-      loginBtn.disabled = false;
+      setLoginButtonLoading(false);
       chrome.runtime.onMessage.removeListener(messageListener);
     } else if (request.action === 'LOGIN_ERROR') {
       console.error('Login error:', request.message);
       showStatus(`Login error: ${request.message}`, 'error');
-      loginBtn.disabled = false;
+      setLoginButtonLoading(false);
       chrome.runtime.onMessage.removeListener(messageListener);
     }
   };
