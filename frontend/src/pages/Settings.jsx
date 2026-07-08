@@ -1,4 +1,5 @@
 import { Bell, Github, Palette, Plug, UserRound } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Button, Card, Input, PageHeader, Section } from '../components/ui'
 import ThemeSelector from '../components/ThemeSelector'
 import { getGithubLoginUrl } from '../api/auth'
@@ -12,6 +13,7 @@ function SettingRow({ icon: Icon, title, description, children }) {
 export default function Settings() {
   const auth = useAuth()
   const extension = useExtension()
+  const navigate = useNavigate()
 
   const handleConfigureReminders = () => {
     alert('Reminders configuration is coming soon. This feature will allow you to set up gentle prompts for planned work and reviews.')
@@ -19,8 +21,7 @@ export default function Settings() {
 
   const handleInstallExtension = () => {
     if (!extension.isInstalled) {
-      // Direct them to Chrome Web Store when published
-      alert('Extension is not installed. Please install from the Chrome Web Store (coming soon).')
+      navigate('/install')
     } else if (!extension.isConnected) {
       alert('Extension is installed but not connected. The extension should connect automatically when you log into Momentum.')
     }

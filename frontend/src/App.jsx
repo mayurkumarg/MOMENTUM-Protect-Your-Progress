@@ -4,6 +4,7 @@ import Activity from './pages/Activity'
 import Analytics from './pages/Analytics'
 import Assistant from './pages/Assistant'
 import ProtectedRoute, { LoginRoute } from './auth/ProtectedRoute'
+import Install from './pages/Install'
 import Overview from './pages/Overview'
 import Settings from './pages/Settings'
 import Tasks from './pages/Tasks'
@@ -17,6 +18,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginRoute><Login /></LoginRoute>} />
       <Route path="/register" element={<LoginRoute><Register /></LoginRoute>} />
+      <Route path="/install" element={<Install />} />
       <Route path="/auth/github/callback" element={<GitHubCallback />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>

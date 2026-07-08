@@ -95,6 +95,14 @@ try {
   const psCommand = `Compress-Archive -Path '${DIST_DIR}\\*' -DestinationPath '${zipFile}' -Force`;
   execSync(`powershell.exe -NoProfile -Command "${psCommand}"`, { stdio: 'inherit' });
   console.log(`✅ Build successful! Generated: ${zipFile}`);
+
+  // Publish to the frontend so the /install page always serves the latest build.
+  console.log('🌐 Publishing download for the frontend install page...');
+  const downloadsDir = path.join(ROOT_DIR, 'frontend', 'public', 'downloads');
+  fs.mkdirSync(downloadsDir, { recursive: true });
+  const publishedZip = path.join(downloadsDir, 'momentum-sync-extension.zip');
+  fs.copyFileSync(zipFile, publishedZip);
+  console.log(`✅ Published: ${publishedZip}`);
 } catch (error) {
   console.error('❌ Failed to create ZIP archive:', error.message);
 }
