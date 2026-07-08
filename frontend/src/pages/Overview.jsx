@@ -3,11 +3,12 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WorkList from '../components/WorkList'
 import { WorkloadStatusCard } from '../components/WorkloadStatus'
+import { useToast } from '../components/ToastProvider'
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section } from '../components/ui'
 import { useActivities } from '../hooks/useActivities'
 import { useTasks } from '../hooks/useTasks'
 import { useWorkload } from '../hooks/useWorkload'
-import { formatDateTime, formatMinutes } from '../utils/format'
+import { formatDateTime, formatMinutes, getGreeting } from '../utils/format'
 import { mapTaskToWorkItem, splitTasks } from '../utils/tasks'
 
 function ActivityPreview({ activities }) {
@@ -33,6 +34,7 @@ function ActivityPreview({ activities }) {
 
 export default function Overview() {
   const navigate = useNavigate()
+  const toast = useToast()
   const tasksQuery = useTasks()
   const activityQuery = useActivities()
   const workloadQuery = useWorkload()
@@ -45,13 +47,19 @@ export default function Overview() {
   const error = tasksQuery.error || activityQuery.error
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())
 
+  const handleRetry = () => {
+    Promise.all([tasksQuery.refetch(), activityQuery.refetch()]).catch((retryError) => {
+      toast.error(retryError.message || 'Still unable to load. Please try again.')
+    })
+  }
+
   return (
     <div className="space-y-8">
-      <PageHeader eyebrow={dateLabel} title="Good afternoon." description="A calm view of what deserves your attention next." actions={<Button icon={Plus} onClick={() => navigate('/tasks')}>Add task</Button>} />
+      <PageHeader eyebrow={dateLabel} title={getGreeting()} description="A calm view of what deserves your attention next." actions={<Button icon={Plus} onClick={() => navigate('/tasks')}>Add task</Button>} />
       {isLoading ? (
         <Card><LoadingState label="Loading your workspace" /></Card>
       ) : error ? (
-        <Card><ErrorState title="Overview could not load" description={error.message} action={<Button variant="secondary" onClick={() => { tasksQuery.refetch().catch(() => {}); activityQuery.refetch().catch(() => {}) }}>Retry</Button>} /></Card>
+        <Card><ErrorState title="Overview could not load" description={error.message} action={<Button variant="secondary" onClick={handleRetry}>Retry</Button>} /></Card>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-8">

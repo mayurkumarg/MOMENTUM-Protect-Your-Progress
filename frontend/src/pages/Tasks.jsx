@@ -1,6 +1,7 @@
-import { Filter, Inbox, LoaderCircle, Plus, Search } from 'lucide-react'
+import { Filter, Inbox, LoaderCircle, Plus, Search, TriangleAlert, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import WorkList from '../components/WorkList'
+import { useToast } from '../components/ToastProvider'
 import { Button, Card, EmptyState, ErrorState, IconButton, Input, LoadingState, PageHeader, Section, SegmentedControl } from '../components/ui'
 import { useTasks } from '../hooks/useTasks'
 import { toDateTimeInputValue } from '../utils/format'
@@ -20,13 +21,13 @@ function TaskForm({ onSubmit, isSaving, onCancel }) {
 
   const submit = async (event) => {
     event.preventDefault()
-    await onSubmit({
+    const success = await onSubmit({
       title: form.title.trim(),
       category: form.category.trim() || null,
       estimatedHours: Number(form.estimatedHours),
       deadline: new Date(form.deadline).toISOString(),
     })
-    setForm(emptyTask)
+    if (success) setForm(emptyTask)
   }
 
   return (
@@ -54,27 +55,50 @@ export default function Tasks() {
   const [view, setView] = useState('List')
   const [showForm, setShowForm] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const toast = useToast()
   const { tasks, isLoading, error, refetch, addTask, updateTask, removeTask } = useTasks()
 
-  const mappedTasks = useMemo(() => tasks.map(mapTaskToWorkItem), [tasks])
-  const groups = useMemo(() => splitTasks(tasks), [tasks])
+  const filteredTasks = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return tasks
+    return tasks.filter((task) => task.title.toLowerCase().includes(term))
+  }, [tasks, searchTerm])
+
+  const mappedTasks = useMemo(() => filteredTasks.map(mapTaskToWorkItem), [filteredTasks])
+  const groups = useMemo(() => splitTasks(filteredTasks), [filteredTasks])
 
   const createTask = async (task) => {
     setIsSaving(true)
     try {
       await addTask(task)
       setShowForm(false)
+      toast.success('Task created.')
+      return true
+    } catch (error) {
+      toast.error(error.message || 'Could not create task.')
+      return false
     } finally {
       setIsSaving(false)
     }
   }
 
-  const toggleComplete = (task) => {
-    updateTask(task.id, { status: task.completed ? 'PENDING' : 'COMPLETED' }).catch(() => {})
-  }
+  const toggleComplete = (task) =>
+    updateTask(task.id, { status: task.completed ? 'PENDING' : 'COMPLETED' }).catch((error) => {
+      toast.error(error.message || 'Could not update task.')
+    })
 
-  const deleteSelectedTask = (task) => {
-    removeTask(task.id).catch(() => {})
+  const deleteSelectedTask = (task) =>
+    removeTask(task.id)
+      .then(() => toast.success('Task deleted.'))
+      .catch((error) => {
+        toast.error(error.message || 'Could not delete task.')
+      })
+
+  const closeSearch = () => {
+    setSearchOpen(false)
+    setSearchTerm('')
   }
 
   return (
@@ -82,17 +106,31 @@ export default function Tasks() {
       <PageHeader eyebrow="Plan" title="Tasks" description="Shape your workload into a plan you can actually follow." actions={<Button icon={Plus} onClick={() => setShowForm(true)}>New task</Button>} />
       {showForm && <TaskForm onSubmit={createTask} isSaving={isSaving} onCancel={() => setShowForm(false)} />}
       {error && (
-        <Card><ErrorState title="Tasks could not load" description={error.message} action={<Button variant="secondary" onClick={() => refetch().catch(() => {})}>Retry</Button>} /></Card>
+        <Card><ErrorState title="Tasks could not load" description={error.message} action={<Button variant="secondary" onClick={() => refetch().catch((retryError) => toast.error(retryError.message || 'Still unable to load.'))}>Retry</Button>} /></Card>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl options={['List', 'Board']} value={view} onChange={setView} />
-        <div className="flex gap-1"><IconButton icon={Search} label="Search tasks" /><IconButton icon={Filter} label="Filter tasks" /></div>
+        <div className="flex gap-1">
+          <IconButton icon={Search} label="Search tasks" onClick={() => setSearchOpen((open) => !open)} className={searchOpen ? 'bg-surface-subtle text-ink' : ''} />
+          <IconButton icon={Filter} label="Filter tasks" onClick={() => toast.info('Filtering is coming soon.')} />
+        </div>
       </div>
+      {searchOpen && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1"><Input label="Search tasks" placeholder="Search by title" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} autoFocus /></div>
+          <IconButton icon={X} label="Close search" onClick={closeSearch} />
+        </div>
+      )}
       {isLoading ? (
         <Card><LoadingState label="Loading tasks" /></Card>
       ) : view === 'List' ? (
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_280px]">
           <div className="space-y-7">
+            {groups.overdue.length > 0 && (
+              <Section title="Overdue" description="Past their deadline and still pending.">
+                <WorkList items={groups.overdue.map(mapTaskToWorkItem)} onToggleComplete={toggleComplete} onDelete={deleteSelectedTask} />
+              </Section>
+            )}
             <Section title="Today" description="Tasks due before the day ends.">
               {groups.today.length ? <WorkList items={groups.today.map(mapTaskToWorkItem)} onToggleComplete={toggleComplete} onDelete={deleteSelectedTask} /> : <Card><EmptyState compact icon={Inbox} title="Nothing due today" description="Add a task with today's deadline when there is something worth protecting." action={<Button variant="secondary" icon={Plus} onClick={() => setShowForm(true)}>Add task</Button>} /></Card>}
             </Section>
@@ -121,7 +159,11 @@ export default function Tasks() {
         </div>
       )}
       {!isLoading && !mappedTasks.length && !error && (
-        <Card><EmptyState icon={Inbox} title="No tasks yet" description="Create your first task to start turning intent into a plan." action={<Button icon={Plus} onClick={() => setShowForm(true)}>New task</Button>} /></Card>
+        searchTerm.trim() ? (
+          <Card><EmptyState icon={Search} title="No matching tasks" description={`Nothing matches "${searchTerm.trim()}".`} action={<Button variant="secondary" onClick={closeSearch}>Clear search</Button>} /></Card>
+        ) : (
+          <Card><EmptyState icon={Inbox} title="No tasks yet" description="Create your first task to start turning intent into a plan." action={<Button icon={Plus} onClick={() => setShowForm(true)}>New task</Button>} /></Card>
+        )
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { Gauge } from 'lucide-react'
+import { Gauge, TriangleAlert } from 'lucide-react'
 import { Badge, Card, LoadingState } from './ui'
 
 const TONE_BY_VALUE = {
@@ -26,14 +26,18 @@ function StatusRow({ label, value }) {
   )
 }
 
-// Quiet by design: a secondary widget shouldn't surface a scary error state, it just doesn't render.
 export function WorkloadStatusCard({ summary, isLoading, error }) {
   if (isLoading) {
     return <Card><LoadingState label="Reading your workload" /></Card>
   }
 
   if (error || !summary) {
-    return null
+    return (
+      <Card className="flex items-center gap-3 p-4 text-sm text-muted">
+        <TriangleAlert size={16} className="shrink-0 text-faint" />
+        Workload status is unavailable right now.
+      </Card>
+    )
   }
 
   return (
@@ -50,35 +54,5 @@ export function WorkloadStatusCard({ summary, isLoading, error }) {
         <StatusRow label="Overall" value={summary.overloadStatus} />
       </div>
     </Card>
-  )
-}
-
-function MetricStat({ value, label }) {
-  return (
-    <Card className="p-5">
-      <span className="font-display text-3xl font-extrabold text-ink">{value}</span>
-      <p className="mt-2 text-sm leading-5 text-muted">{label}</p>
-    </Card>
-  )
-}
-
-export function WorkloadMetricsGrid({ summary, isLoading, error }) {
-  if (isLoading) {
-    return <Card><LoadingState label="Reading your workload" /></Card>
-  }
-
-  if (error || !summary) {
-    return null
-  }
-
-  const { metrics } = summary
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <MetricStat value={metrics.currentStreakDays} label="day activity streak" />
-      <MetricStat value={metrics.activeDaysLast7} label="active days this week" />
-      <MetricStat value={metrics.completedTasksLast7} label="tasks completed this week" />
-      <MetricStat value={metrics.overdueTasksCount} label="overdue tasks" />
-    </div>
   )
 }

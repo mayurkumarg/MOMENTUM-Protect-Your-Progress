@@ -1,9 +1,12 @@
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Code2, ListPlus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useToast } from '../components/ToastProvider'
 import { Button, Card, EmptyState, ErrorState, IconButton, LoadingState, PageHeader, Section } from '../components/ui'
 import { useTimeline } from '../hooks/useTimeline'
 import { formatDateTime, formatMinutes } from '../utils/format'
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 function getWeekRange(offset) {
   const now = new Date()
@@ -44,6 +47,7 @@ function TimelineItem({ item }) {
 
 export default function Timeline() {
   const navigate = useNavigate()
+  const toast = useToast()
   const { items, isLoading, error, refetch } = useTimeline()
   const [weekOffset, setWeekOffset] = useState(0)
 
@@ -75,18 +79,35 @@ export default function Timeline() {
     setWeekOffset(weekOffset + 1)
   }
 
+  const handleJumpToDate = (event) => {
+    const value = event.target.value
+    if (!value) return
+    const picked = new Date(`${value}T00:00:00`)
+    const { start: thisWeekStart } = getWeekRange(0)
+    const diffDays = Math.round((picked - thisWeekStart) / DAY_MS)
+    setWeekOffset(Math.floor(diffDays / 7))
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="See the week" title="Timeline" description="Understand how planned work and real effort fit across your time." actions={<Button icon={Plus} onClick={handleScheduleWork}>Schedule work</Button>} />
       <div className="flex items-center justify-between">
         <div><p className="text-sm font-semibold">{weekLabel}</p><p className="text-xs text-faint">Chronological feed from backend data</p></div>
-        <div className="flex gap-1"><IconButton icon={ChevronLeft} label="Previous week" onClick={handlePreviousWeek} /><IconButton icon={CalendarDays} label="Choose week" /><IconButton icon={ChevronRight} label="Next week" onClick={handleNextWeek} /></div>
+        <div className="flex items-center gap-1">
+          {weekOffset !== 0 && <Button variant="ghost" className="h-9 px-3 text-xs" onClick={() => setWeekOffset(0)}>Today</Button>}
+          <IconButton icon={ChevronLeft} label="Previous week" onClick={handlePreviousWeek} />
+          <div className="relative">
+            <IconButton icon={CalendarDays} label="Choose week" />
+            <input type="date" aria-label="Jump to week containing date" onChange={handleJumpToDate} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+          </div>
+          <IconButton icon={ChevronRight} label="Next week" onClick={handleNextWeek} />
+        </div>
       </div>
       <Section title="Unified timeline" description="Tasks and captured coding activity, sorted by time.">
         {isLoading ? (
           <Card><LoadingState label="Building timeline" /></Card>
         ) : error ? (
-          <Card><ErrorState title="Timeline could not load" description={error.message} action={<Button variant="secondary" onClick={() => refetch().catch(() => {})}>Retry</Button>} /></Card>
+          <Card><ErrorState title="Timeline could not load" description={error.message} action={<Button variant="secondary" onClick={() => refetch().catch((retryError) => toast.error(retryError.message || 'Still unable to load.'))}>Retry</Button>} /></Card>
         ) : weekItems.length ? (
           <Card className="overflow-hidden">{weekItems.map((item) => <TimelineItem key={item.id} item={item} />)}</Card>
         ) : (
