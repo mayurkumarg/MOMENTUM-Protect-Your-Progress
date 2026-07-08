@@ -28,6 +28,7 @@ app.use('/api/auth', require('./modules/auth/auth.routes'));
 app.use('/api/tasks', require('./modules/task/task.routes'));
 app.use('/api/activities', require('./modules/activity/activity.routes'));
 app.use('/api/dsa', require('./modules/activity/dsa-activity.routes'));
+app.use('/api/workload', require('./modules/workload/workload.routes'));
 
 app.use(errorMiddleware);
 

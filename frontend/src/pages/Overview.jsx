@@ -2,9 +2,11 @@ import { ArrowRight, CheckSquare2, Code2, GitBranch, Plus, Sparkles } from 'luci
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WorkList from '../components/WorkList'
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section, SetupPrompt } from '../components/ui'
+import { WorkloadStatusCard } from '../components/WorkloadStatus'
+import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section } from '../components/ui'
 import { useActivities } from '../hooks/useActivities'
 import { useTasks } from '../hooks/useTasks'
+import { useWorkload } from '../hooks/useWorkload'
 import { formatDateTime, formatMinutes } from '../utils/format'
 import { mapTaskToWorkItem, splitTasks } from '../utils/tasks'
 
@@ -33,6 +35,7 @@ export default function Overview() {
   const navigate = useNavigate()
   const tasksQuery = useTasks()
   const activityQuery = useActivities()
+  const workloadQuery = useWorkload()
 
   const groups = useMemo(() => splitTasks(tasksQuery.tasks), [tasksQuery.tasks])
   const focusNext = groups.today[0] || groups.upcoming[0] || null
@@ -55,7 +58,7 @@ export default function Overview() {
             <Section title="Today Snapshot" description="Only what is already in your task and activity records." action={<Button variant="ghost" onClick={() => navigate('/tasks')}>Open tasks <ArrowRight size={15} /></Button>}>
               {todayTasks.length ? <WorkList items={todayTasks} /> : <Card><EmptyState compact icon={CheckSquare2} title="No tasks due today" description="Today is clear unless you add something new." /></Card>}
             </Section>
-            <SetupPrompt title="Bring your coding work into focus" description="Connect GitHub and the Momentum extension to let completed coding sessions quietly appear alongside planned work." />
+            <WorkloadStatusCard summary={workloadQuery.summary} isLoading={workloadQuery.isLoading} error={workloadQuery.error} />
             <Section title="Recent Activity" description="The latest work captured by the backend.">
               <ActivityPreview activities={activityQuery.activities} />
             </Section>
