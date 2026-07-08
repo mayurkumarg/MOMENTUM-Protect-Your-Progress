@@ -1,9 +1,13 @@
 /**
  * InterviewBit Platform Adapter
  * Detects accepted submissions and extracts problem data.
+ *
+ * Requires: shared/dom-utils.js (self.__MomentumDOMUtils)
  */
 (function () {
   if (!self.__MomentumPlatforms) self.__MomentumPlatforms = {};
+
+  const { normalizeText, collectVisibleText } = self.__MomentumDOMUtils;
 
   const RESULT_SELECTORS = [
     '[class*="accepted"]',
@@ -15,41 +19,13 @@
     '[role="alert"]',
   ];
 
-  function normalize(text) {
-    return (text || '').replace(/\s+/g, ' ').trim();
-  }
-
-  function isVisible(el) {
-    if (!el || !el.isConnected) return false;
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function collectVisibleResultText() {
-    const pieces = [];
-    const seen = new Set();
-
-    for (const selector of RESULT_SELECTORS) {
-      for (const el of document.querySelectorAll(selector)) {
-        if (seen.has(el) || !isVisible(el)) continue;
-        seen.add(el);
-        const text = normalize(el.textContent);
-        if (text) pieces.push(text);
-      }
-    }
-
-    return pieces.join(' ');
-  }
-
   function getSlugFromUrl() {
     const match = window.location.pathname.match(/\/problems\/([^/]+)/i);
     return match ? match[1] : '';
   }
 
   function getDifficulty() {
-    const text = normalize(document.body && document.body.textContent);
+    const text = normalizeText(document.body && document.body.textContent);
     const match = text.match(/\b(Easy|Medium|Hard)\b/i);
     return match ? match[1] : undefined;
   }
@@ -64,13 +40,13 @@
     },
 
     isSubmitElement(element) {
-      const text = normalize(`${element.innerText || ''} ${element.value || ''} ${element.getAttribute('aria-label') || ''}`);
+      const text = normalizeText(`${element.innerText || ''} ${element.value || ''} ${element.getAttribute('aria-label') || ''}`);
       return /\bsubmit\b/i.test(text) && !/\brun\b/i.test(text);
     },
 
     mutationLooksRelevant(mutations) {
       for (const mutation of mutations || []) {
-        const text = normalize(mutation.target && mutation.target.textContent);
+        const text = normalizeText(mutation.target && mutation.target.textContent);
         if (/accepted|correct|congratulations|success|score|submission|passed/i.test(text)) return true;
       }
       return false;
@@ -78,9 +54,9 @@
 
     detectSolve(context = {}) {
       const signals = [];
-      const resultText = collectVisibleResultText();
-      const bodyText = normalize(document.body ? document.body.textContent : '');
-      const text = normalize(`${resultText} ${bodyText}`);
+      const resultText = collectVisibleText(RESULT_SELECTORS);
+      const bodyText = normalizeText(document.body ? document.body.textContent : '');
+      const text = normalizeText(`${resultText} ${bodyText}`);
 
       const accepted = /\bAccepted\b/i.test(text);
       const correct = /\bCorrect\s+Answer\b|\bCorrect\b/i.test(text);
@@ -114,8 +90,8 @@
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(' ');
 
-      const title = normalize(heading && heading.textContent) ||
-        normalize(document.title).replace(/\s*-\s*InterviewBit.*$/i, '') ||
+      const title = normalizeText(heading && heading.textContent) ||
+        normalizeText(document.title).replace(/\s*-\s*InterviewBit.*$/i, '') ||
         titleFromSlug ||
         'Unknown Problem';
 

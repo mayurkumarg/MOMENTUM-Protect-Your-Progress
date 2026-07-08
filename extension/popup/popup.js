@@ -5,6 +5,41 @@ const userSection = document.querySelector('.user-section');
 const userName = document.getElementById('userName');
 const userGithubId = document.getElementById('userGithubId');
 const status = document.getElementById('status');
+const syncStatusIndicator = document.getElementById('syncStatusIndicator');
+
+function updateSyncStatusUI(syncStatus) {
+  if (!syncStatusIndicator) return;
+  
+  if (!syncStatus) {
+    syncStatusIndicator.textContent = 'Status: Unknown';
+    syncStatusIndicator.className = 'status loading';
+    return;
+  }
+
+  const state = syncStatus.state || 'Idle';
+  const count = syncStatus.pendingCount || 0;
+
+  if (state === 'Syncing') {
+    syncStatusIndicator.textContent = 'Syncing...';
+    syncStatusIndicator.className = 'status loading';
+  } else if (state === 'Offline') {
+    syncStatusIndicator.textContent = `Offline (${count} pending)`;
+    syncStatusIndicator.className = 'status error';
+  } else if (state === 'Error') {
+    syncStatusIndicator.textContent = `Backend Unavailable`;
+    syncStatusIndicator.className = 'status error';
+  } else {
+    syncStatusIndicator.textContent = count > 0 ? `Connected (${count} pending)` : 'Connected & Synced';
+    syncStatusIndicator.className = 'status success';
+  }
+}
+
+// Listen for live updates
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.syncStatus) {
+    updateSyncStatusUI(changes.syncStatus.newValue);
+  }
+});
 
 loginBtn.addEventListener('click', loginWithGitHub);
 logoutBtn.addEventListener('click', handleLogout);
@@ -13,7 +48,6 @@ function loginWithGitHub() {
   loginBtn.disabled = true;
   showStatus('Redirecting to GitHub...', 'loading');
 
-  // Send message to background script to start OAuth flow
   chrome.runtime.sendMessage({ action: 'PERFORM_OAUTH' }, (response) => {
     if (!response || !response.success) {
       showStatus('Failed to start login', 'error');
@@ -21,7 +55,6 @@ function loginWithGitHub() {
     }
   });
 
-  // Listen for login success/error messages from background script
   const messageListener = (request) => {
     if (request.action === 'LOGIN_SUCCESS') {
       console.log('Login successful:', request.user);
@@ -40,7 +73,6 @@ function loginWithGitHub() {
 
   chrome.runtime.onMessage.addListener(messageListener);
 
-  // Timeout after 5 minutes
   setTimeout(() => {
     chrome.runtime.onMessage.removeListener(messageListener);
   }, 5 * 60 * 1000);
@@ -67,19 +99,8 @@ function hideStatus() {
   status.style.display = 'none';
 }
 
-function checkAuthentication() {
-  chrome.storage.local.get(['user', 'token', 'accessToken'], (result) => {
-    if ((result.token || result.accessToken) && result.user) {
-      displayUserInfo(result.user);
-    } else {
-      showStatus('Login verification failed', 'error');
-      loginBtn.disabled = false;
-    }
-  });
-}
-
 function displayUserInfo(user) {
-  if (user && user.githubId) {
+  if (user && user.userId) {
     userName.textContent = user.githubId || 'User';
     userGithubId.textContent = `ID: ${user.userId || 'Unknown'}`;
 
@@ -91,13 +112,21 @@ function displayUserInfo(user) {
 
 // Load user data on popup open
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.local.get(['user', 'token', 'accessToken'], (result) => {
-    if ((result.token || result.accessToken) && result.user) {
-      displayUserInfo(result.user);
+  chrome.runtime.sendMessage({ action: 'GET_STATUS' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError);
+      return;
+    }
+    if (response && response.isAuthenticated && response.user) {
+      displayUserInfo(response.user);
     } else {
+      loginSection.classList.add('active');
+      userSection.classList.remove('active');
       loginBtn.disabled = false;
     }
   });
+
+  chrome.storage.local.get(['syncStatus'], (result) => {
+    updateSyncStatusUI(result.syncStatus);
+  });
 });
-
-

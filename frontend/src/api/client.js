@@ -40,6 +40,9 @@ export function getStoredToken() {
 export function storeToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else localStorage.removeItem(TOKEN_KEY)
+  
+  // Sync with Momentum browser extension if installed
+  window.postMessage({ type: 'MOMENTUM_AUTH_SYNC', token: token || null, refreshToken: getStoredRefreshToken() }, '*')
 }
 
 export function getStoredRefreshToken() {
@@ -49,11 +52,17 @@ export function getStoredRefreshToken() {
 export function storeRefreshToken(token) {
   if (token) localStorage.setItem(REFRESH_TOKEN_KEY, token)
   else localStorage.removeItem(REFRESH_TOKEN_KEY)
+  
+  // Sync with Momentum browser extension if installed
+  window.postMessage({ type: 'MOMENTUM_AUTH_SYNC', token: getStoredToken(), refreshToken: token || null }, '*')
 }
 
 export function clearStoredAuth() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
+  
+  // Sync with Momentum browser extension if installed
+  window.postMessage({ type: 'MOMENTUM_AUTH_SYNC', token: null, refreshToken: null }, '*')
 }
 
 function buildUrl(path, params) {

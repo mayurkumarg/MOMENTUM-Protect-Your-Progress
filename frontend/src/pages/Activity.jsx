@@ -2,11 +2,19 @@ import { Chrome, Code2, Github, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section } from '../components/ui'
 import { useActivities } from '../hooks/useActivities'
+import { useExtension } from '../hooks/useExtension'
 import { formatDateTime, formatMinutes } from '../utils/format'
 
-const sources = [
+const getSources = (extension) => [
   { icon: Github, title: 'GitHub', detail: 'Commits and meaningful repository activity', status: 'Backend ready', action: 'connect-github' },
-  { icon: Chrome, title: 'Browser extension', detail: 'Practice activity from supported coding platforms', status: 'DSA ready', action: 'install-extension' },
+  { 
+    icon: Chrome, 
+    title: 'Browser extension', 
+    detail: 'Practice activity from supported coding platforms', 
+    status: extension.isConnected ? 'Connected' : extension.isInstalled ? 'Installed' : 'Not installed', 
+    action: extension.isConnected ? null : 'install-extension',
+    connected: extension.isConnected
+  },
 ]
 
 function ActivityRow({ activity }) {
@@ -31,6 +39,9 @@ function ActivityRow({ activity }) {
 export default function Activity() {
   const navigate = useNavigate()
   const { activities, isLoading, error, refetch } = useActivities()
+  const extension = useExtension()
+  
+  const sources = getSources(extension)
 
   const handleLogActivity = () => {
     // Feature coming soon - manual activity logging UI to be implemented
@@ -38,10 +49,15 @@ export default function Activity() {
   }
 
   const handleConnectSource = (action) => {
+    if (!action) return
     if (action === 'connect-github') {
       navigate('/settings')
     } else if (action === 'install-extension') {
-      alert('Browser extension installation guide is coming soon. Visit settings to learn more.')
+      if (!extension.isInstalled) {
+        alert('Browser extension installation guide is coming soon. Visit settings to learn more.')
+      } else {
+        alert('Extension is installed but not connected. It should connect automatically when you log in.')
+      }
       navigate('/settings')
     }
   }
@@ -51,7 +67,7 @@ export default function Activity() {
       <PageHeader eyebrow="Observe" title="Activity" description="A trustworthy record of the work you actually did, captured with minimal effort." actions={<Button variant="secondary" icon={Plus} onClick={handleLogActivity}>Log activity</Button>} />
       <Section title="Connected sources" description="Choose which signals Momentum can use to understand your progress.">
         <div className="grid gap-4 md:grid-cols-2">
-          {sources.map(({ icon: Icon, title, detail, status, action }) => <Card key={title} className="flex items-start gap-4 p-5"><div className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={19} /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="font-display text-[15px] font-bold">{title}</p><Badge>{status}</Badge></div><p className="mt-1.5 text-sm leading-5 text-muted">{detail}</p><Button variant="ghost" className="mt-3 h-8 px-0 text-accent" onClick={() => handleConnectSource(action)}>Connect source</Button></div></Card>)}
+          {sources.map(({ icon: Icon, title, detail, status, action, connected }) => <Card key={title} className="flex items-start gap-4 p-5"><div className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={19} /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="font-display text-[15px] font-bold">{title}</p><Badge tone={connected ? "green" : undefined}>{status}</Badge></div><p className="mt-1.5 text-sm leading-5 text-muted">{detail}</p>{action && <Button variant="ghost" className="mt-3 h-8 px-0 text-accent" onClick={() => handleConnectSource(action)}>Connect source</Button>}</div></Card>)}
         </div>
       </Section>
       <Section title="Activity feed" description="Coding sessions, commits, and practice submissions form a single history.">

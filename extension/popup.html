@@ -134,6 +134,9 @@
 
     <div class="login-section active">
       <button class="btn-login" id="loginBtn">Login with GitHub</button>
+      <div style="text-align: center; font-size: 13px; color: #666; margin-top: 15px;">
+        Or login on <a href="http://localhost:5173" target="_blank" style="color: #2980b9; text-decoration: none; font-weight: 600;">momentum-sync.com</a> to connect automatically.
+      </div>
       <div class="status loading" id="status" style="display: none;"></div>
     </div>
 
@@ -143,10 +146,11 @@
         <div class="user-name" id="userName"></div>
         <div class="user-github" id="userGithubId"></div>
       </div>
+      <div id="syncStatusIndicator" class="status" style="margin-bottom: 15px; font-weight: bold;"></div>
       <button class="btn-logout" id="logoutBtn">Logout</button>
     </div>
   </div>
 
-  <script src="popup.js"></script>
+  <script src="popup/popup.js"></script>
 </body>
 </html>

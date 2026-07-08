@@ -1,21 +1,21 @@
-// Content script: unified platform adapter detection engine.
+/**
+ * Momentum Extension — Unified Platform Detection Engine
+ * Observes DOM mutations and submit events to detect accepted submissions
+ * across all supported coding platforms.
+ *
+ * Requires:
+ *   config/constants.js    (self.__MomentumConfig)
+ *   shared/dom-utils.js    (self.__MomentumDOMUtils)
+ *   providers/*.js          (self.__MomentumPlatforms)
+ */
 console.log('[Momentum] Content script loaded');
 
 (function () {
   const platforms = self.__MomentumPlatforms || {};
+  const config = self.__MomentumConfig;
+  const { normalizeText, isElementVisible, collectVisibleText, findVisibleElementByText } = self.__MomentumDOMUtils;
 
-  const SUBMISSION_TIMEOUT_MS = 120 * 1000;
-  const DETECTION_RECHECK_MS = 900;
-  const STARTUP_QUIET_MS = 2500;
-  const SEND_COOLDOWN_MS = 15 * 1000;
-  const URL_POLL_MS = 1000;
-  const OBSERVER_OPTIONS = {
-    childList: true,
-    subtree: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ['class', 'data-e2e-locator', 'aria-label', 'role'],
-  };
+  const TIMING = config.CONTENT_SCRIPT_TIMING;
 
   let lastUrl = window.location.href;
   let pageLoadedAt = Date.now();
@@ -115,7 +115,7 @@ console.log('[Momentum] Content script loaded');
       source,
       problemKey,
       startedAt: now,
-      expiresAt: now + SUBMISSION_TIMEOUT_MS,
+      expiresAt: now + TIMING.SUBMISSION_TIMEOUT_MS,
       sawResultMutation: false,
     };
 
@@ -129,7 +129,7 @@ console.log('[Momentum] Content script loaded');
         });
         submission = null;
       }
-    }, SUBMISSION_TIMEOUT_MS + 500);
+    }, TIMING.SUBMISSION_TIMEOUT_MS + 500);
 
     log('Submit detected:', { platform: adapter.name, source, problemKey });
     scheduleReconcile('submit detected');
@@ -238,7 +238,7 @@ console.log('[Momentum] Content script loaded');
     reconcileTimer = setTimeout(() => {
       reconcileTimer = null;
       evaluateSolve(reason);
-    }, DETECTION_RECHECK_MS);
+    }, TIMING.DETECTION_RECHECK_MS);
   }
 
   function callDetectSolve(adapter, context) {
@@ -259,50 +259,12 @@ console.log('[Momentum] Content script loaded');
 
   function isInCooldown(problemKey) {
     const lastSentAt = notifiedKeys.get(problemKey) || 0;
-    const remainingMs = SEND_COOLDOWN_MS - (Date.now() - lastSentAt);
+    const remainingMs = TIMING.SEND_COOLDOWN_MS - (Date.now() - lastSentAt);
     if (remainingMs > 0) {
       log('Skipped because cooldown:', { problemKey, remainingMs });
       return true;
     }
     return false;
-  }
-
-  function normalizeText(text) {
-    return (text || '').replace(/\s+/g, ' ').trim();
-  }
-
-  function isElementVisible(element) {
-    if (!element || !element.isConnected) return false;
-    const style = window.getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-    const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function getVisibleTextFromSelectors(selectors) {
-    const chunks = [];
-    const seen = new Set();
-
-    for (const selector of selectors) {
-      for (const element of document.querySelectorAll(selector)) {
-        if (seen.has(element) || !isElementVisible(element)) continue;
-        seen.add(element);
-        const text = normalizeText(element.textContent);
-        if (text) chunks.push(text);
-      }
-    }
-
-    return chunks.join(' ');
-  }
-
-  function findVisibleElementByText(pattern, selectors) {
-    for (const selector of selectors) {
-      for (const element of document.querySelectorAll(selector)) {
-        if (!isElementVisible(element)) continue;
-        if (pattern.test(normalizeText(element.textContent))) return element;
-      }
-    }
-    return null;
   }
 
   function detectStrongAcceptedSignal(adapter) {
@@ -332,8 +294,8 @@ console.log('[Momentum] Content script loaded');
       'button',
     ];
 
-    const scopedText = normalizeText(getVisibleTextFromSelectors(resultSelectors));
-    const visibleSignalText = normalizeText(getVisibleTextFromSelectors(broadVisibleTextSelectors));
+    const scopedText = normalizeText(collectVisibleText(resultSelectors));
+    const visibleSignalText = normalizeText(collectVisibleText(broadVisibleTextSelectors));
     const text = normalizeText(`${scopedText} ${visibleSignalText}`);
 
     const hasAccepted = /\bAccepted\b/i.test(text);
@@ -389,7 +351,7 @@ console.log('[Momentum] Content script loaded');
       strongSignalFromRecentMutation,
       submission,
       pageAgeMs: Date.now() - pageLoadedAt,
-      startupQuietMs: STARTUP_QUIET_MS,
+      startupQuietMs: TIMING.STARTUP_QUIET_MS,
       reason,
       url: window.location.href,
     };
@@ -399,7 +361,7 @@ console.log('[Momentum] Content script loaded');
         reason,
         platform: adapter.name,
         problemKey,
-        why: Date.now() - pageLoadedAt < STARTUP_QUIET_MS ? 'startup quiet period / no submit yet' : 'no fresh submit and no recent strong accepted mutation',
+        why: Date.now() - pageLoadedAt < TIMING.STARTUP_QUIET_MS ? 'startup quiet period / no submit yet' : 'no fresh submit and no recent strong accepted mutation',
         strongSignalMissing: strongSignal.missing || [],
         strongSignalDetected: strongSignal.detected,
       });
@@ -481,7 +443,7 @@ console.log('[Momentum] Content script loaded');
     });
 
     try {
-      chrome.runtime.sendMessage({ type: 'PROBLEM_SOLVED', data }, (response) => {
+      chrome.runtime.sendMessage({ type: config.MESSAGE_ACTIONS.PROBLEM_SOLVED, data }, (response) => {
         if (chrome.runtime.lastError) {
           warn('Solve event send failed:', chrome.runtime.lastError.message);
           sendInFlight = false;
@@ -521,7 +483,7 @@ console.log('[Momentum] Content script loaded');
       return;
     }
 
-    log('Retry triggered:', { problemKey, delayMs: 3000 });
+    log('Retry triggered:', { problemKey, delayMs: TIMING.RETRY_DELAY_MS });
     retryTimer = setTimeout(() => {
       retryTimer = null;
       const currentAdapter = getAdapter();
@@ -537,7 +499,7 @@ console.log('[Momentum] Content script loaded');
       }
 
       sendSolved(adapter, problemKey, detection || { reason: 'retry' });
-    }, 3000);
+    }, TIMING.RETRY_DELAY_MS);
   }
 
   function handleMutations(mutations) {
@@ -584,7 +546,7 @@ console.log('[Momentum] Content script loaded');
 
     window.addEventListener('popstate', () => checkUrlChange('popstate'));
     window.addEventListener('hashchange', () => checkUrlChange('hashchange'));
-    urlPollTimer = setInterval(() => checkUrlChange('url poll'), URL_POLL_MS);
+    urlPollTimer = setInterval(() => checkUrlChange('url poll'), TIMING.URL_POLL_MS);
   }
 
   function startObserver() {
@@ -594,7 +556,7 @@ console.log('[Momentum] Content script loaded');
     }
 
     observer = new MutationObserver(handleMutations);
-    observer.observe(document.body, OBSERVER_OPTIONS);
+    observer.observe(document.body, config.OBSERVER_OPTIONS);
     log('MutationObserver active');
   }
 
@@ -602,7 +564,16 @@ console.log('[Momentum] Content script loaded');
   patchHistory();
   startObserver();
 
-  setTimeout(() => scheduleReconcile('startup check'), STARTUP_QUIET_MS);
+  setTimeout(() => scheduleReconcile('startup check'), TIMING.STARTUP_QUIET_MS);
+
+  window.addEventListener('online', () => {
+    log('Network restored (online), requesting queue flush...');
+    try {
+      chrome.runtime.sendMessage({ type: config.MESSAGE_ACTIONS.FLUSH_QUEUE });
+    } catch (e) {
+      warn('Failed to send FLUSH_QUEUE message:', e);
+    }
+  });
 
   window.addEventListener('beforeunload', () => {
     if (observer) observer.disconnect();

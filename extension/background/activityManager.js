@@ -7,23 +7,41 @@
  * - Offline queue integration
  * - API communication
  * - Debug helpers
+ *
+ * Requires:
+ *   config/constants.js           (self.__MomentumConfig)
+ *   storage/storage-service.js    (self.__MomentumStorage)
+ *   background/logger.js          (self.MomentumLogger)
+ *   background/activityQueue.js   (self.ActivityQueue)
  */
 (function () {
   const log = self.MomentumLogger;
   const queue = self.ActivityQueue;
+  const config = self.__MomentumConfig;
+  const storage = self.__MomentumStorage;
 
-  const API_URL = 'http://localhost:5000/api/dsa/activity';
-  const REFRESH_URL = 'http://localhost:5000/api/auth/refresh';
-  const COOLDOWN_MS = 30 * 1000;
-  const MAX_RETRIES = 5;
-  const RECENTLY_SENT_KEY = 'recentlySent';
-  const MAX_RECENT = 100;
-  const RECENT_TTL_MS = 24 * 60 * 60 * 1000;
+  const API_URL = config.API_ENDPOINTS.DSA_ACTIVITY;
+  const REFRESH_URL = config.API_ENDPOINTS.AUTH_REFRESH;
+  const COOLDOWN_MS = config.TIMING.ACTIVITY_COOLDOWN_MS;
+  const MAX_RETRIES = config.TIMING.MAX_RETRIES;
+  const RECENTLY_SENT_KEY = config.STORAGE_KEYS.RECENTLY_SENT;
+  const STATUS_KEY = config.STORAGE_KEYS.SYNC_STATUS;
+  const MAX_RECENT = config.TIMING.MAX_RECENT_SENT;
+  const RECENT_TTL_MS = config.TIMING.RECENT_SENT_TTL_MS;
 
   // In-memory dedup for current service worker session
   const sessionKeys = new Set();
   let isRefreshing = false;
   let refreshPromise = null;
+
+  // ── Sync Status ──────────────────────────────────────────────────────
+
+  async function updateSyncStatus(updates) {
+    const res = await storage.get(STATUS_KEY);
+    const status = res || { state: 'Idle', lastSuccess: null, lastError: null, pendingCount: 0 };
+    Object.assign(status, updates);
+    await storage.set(STATUS_KEY, status);
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -33,8 +51,8 @@
   }
 
   async function getRecentlySent() {
-    const result = await chrome.storage.local.get(RECENTLY_SENT_KEY);
-    return result[RECENTLY_SENT_KEY] || {};
+    const result = await storage.get(RECENTLY_SENT_KEY);
+    return result || {};
   }
 
   async function markAsSent(key) {
@@ -52,7 +70,7 @@
     const entries = Object.entries(cleaned).sort((a, b) => b[1] - a[1]);
     const trimmed = Object.fromEntries(entries.slice(0, MAX_RECENT));
 
-    await chrome.storage.local.set({ [RECENTLY_SENT_KEY]: trimmed });
+    await storage.set(RECENTLY_SENT_KEY, trimmed);
     sessionKeys.add(key);
   }
 
@@ -73,14 +91,6 @@
     return false;
   }
 
-  async function getToken() {
-    const result = await chrome.storage.local.get(['accessToken', 'refreshToken']);
-    return {
-      accessToken: result.accessToken || null,
-      refreshToken: result.refreshToken || null,
-    };
-  }
-
   async function refreshAccessToken() {
     // Prevent multiple simultaneous refresh calls
     if (isRefreshing) {
@@ -90,7 +100,7 @@
     isRefreshing = true;
     refreshPromise = (async () => {
       try {
-        const tokens = await getToken();
+        const tokens = await storage.getTokens();
         if (!tokens.refreshToken) {
           throw new Error('NO_REFRESH_TOKEN');
         }
@@ -111,7 +121,7 @@
         const newAccessToken = result.data.accessToken;
 
         // Store new access token
-        await chrome.storage.local.set({ accessToken: newAccessToken });
+        await storage.setAccessToken(newAccessToken);
         log.info('Access token refreshed successfully');
 
         return newAccessToken;
@@ -131,7 +141,7 @@
       throw new Error('FORCE_OFFLINE');
     }
 
-    const tokens = await getToken();
+    const tokens = await storage.getTokens();
     if (!tokens.accessToken) throw new Error('NO_TOKEN');
 
     const res = await fetch(API_URL, {
@@ -164,7 +174,9 @@
     }
 
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${result.message || 'Unknown error'}`);
+      const err = new Error(`HTTP ${res.status}: ${result.message || 'Unknown error'}`);
+      err.status = res.status;
+      throw err;
     }
 
     return result;
@@ -179,7 +191,15 @@
       try {
         return await sendToAPI(data);
       } catch (err) {
-        if (err.message === 'NO_TOKEN') throw err;
+        if (err.message === 'NO_TOKEN' || err.message === 'FORCE_OFFLINE') {
+          throw err;
+        }
+
+        // Do not retry on permanent client errors
+        if (err.status === 400 || err.status === 422 || err.status === 404 || err.status === 403) {
+          log.error('Permanent client error, aborting retry:', err.message);
+          throw err;
+        }
 
         if (attempt < MAX_RETRIES) {
           const delay = backoffDelay(attempt);
@@ -202,19 +222,31 @@
       if (await isDuplicate(data)) return { deduplicated: true };
 
       const key = generateKey(data);
+      await updateSyncStatus({ state: 'Syncing' });
 
       try {
         const result = await sendWithRetry(data);
         await markAsSent(key);
+        await updateSyncStatus({ state: 'Idle', lastSuccess: Date.now() });
         log.info('Activity synced:', data.problemTitle);
         return result;
       } catch (err) {
         if (err.message === 'NO_TOKEN') {
           log.error('No token — user not logged in');
+          await updateSyncStatus({ state: 'Error', lastError: err.message });
           return;
         }
+        
+        // Permanent failures should not go to the queue
+        if (err.status === 400 || err.status === 422 || err.status === 403) {
+           log.error('Dropped invalid activity:', err.message);
+           await updateSyncStatus({ state: 'Error', lastError: err.message });
+           return;
+        }
+
         await queue.enqueue(data);
         await markAsSent(key);
+        await updateSyncStatus({ state: 'Offline', lastError: err.message });
       }
     },
 
@@ -223,6 +255,10 @@
       if (items.length === 0) return;
 
       log.info('Flushing queue —', items.length, 'pending');
+      await updateSyncStatus({ state: 'Syncing' });
+      
+      let hasError = false;
+      let lastError = null;
 
       for (let i = items.length - 1; i >= 0; i--) {
         const { _queuedAt, _retries, ...data } = items[i];
@@ -238,10 +274,25 @@
           log.info('Activity synced from queue:', data.problemTitle);
           await queue.remove(i);
         } catch (err) {
-          if (err.message === 'NO_TOKEN') return;
+          hasError = true;
+          lastError = err.message;
+          if (err.message === 'NO_TOKEN') break;
+          
+          if (err.status === 400 || err.status === 422 || err.status === 403 || err.status === 404) {
+             log.error('Dropping invalid queue item:', err.message);
+             await queue.remove(i);
+             continue;
+          }
+          
           await queue.updateRetries(i, _retries + 1);
           log.warn(`Queue retry failed (${_retries + 1}/${MAX_RETRIES}):`, data.problemTitle);
         }
+      }
+      
+      if (hasError) {
+        await updateSyncStatus({ state: 'Offline', lastError });
+      } else {
+        await updateSyncStatus({ state: 'Idle', lastSuccess: Date.now() });
       }
     },
 

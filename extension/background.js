@@ -1,86 +1,21 @@
 console.log('🔥 Background script started');
 
 // ── Import reliability modules (must be top-level in MV3 service worker) ──
+importScripts('config/env.js');
+importScripts('config/constants.js');
+importScripts('utils/jwt.js');
+importScripts('storage/storage-service.js');
+importScripts('messaging/messaging-service.js');
+importScripts('auth/oauth.js');
 importScripts('background/logger.js');
 importScripts('background/activityQueue.js');
 importScripts('background/activityManager.js');
 
-const BACKEND_AUTH_URL = 'http://localhost:5000/api/auth/github';
-
-// ═══════════════════════════════════════════════════════════════════════
-// OAUTH FLOW
-// ═══════════════════════════════════════════════════════════════════════
-
-function performOAuth(sendResponse) {
-  chrome.identity.launchWebAuthFlow(
-    {
-      url: BACKEND_AUTH_URL,
-      interactive: true,
-    },
-    (responseUrl) => {
-      if (chrome.runtime.lastError || !responseUrl) {
-        const message =
-          chrome.runtime.lastError?.message || 'Authorization did not complete.';
-        console.error('OAuth launch failed:', message);
-        notifyPopup({ action: 'LOGIN_ERROR', message });
-        sendResponse({ success: false, message });
-        return;
-      }
-
-      try {
-        const finalUrl = new URL(responseUrl);
-        const token = finalUrl.searchParams.get('token');
-
-        if (!token) {
-          throw new Error('Invalid response from server');
-        }
-
-        const user = decodeJWT(token);
-
-        chrome.storage.local.set({ token, accessToken: token, user }, () => {
-          notifyPopup({ action: 'LOGIN_SUCCESS', user });
-          sendResponse({ success: true, user });
-        });
-      } catch (error) {
-        const message = error.message || 'Authentication failed';
-        console.error('OAuth response handling failed:', error);
-        notifyPopup({ action: 'LOGIN_ERROR', message });
-        sendResponse({ success: false, message });
-      }
-    }
-  );
-}
-
-function decodeBase64Url(value) {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-  return atob(padded);
-}
-
-function decodeJWT(token) {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      throw new Error('Invalid token format');
-    }
-
-    const payload = JSON.parse(decodeBase64Url(parts[1]));
-    return {
-      userId: payload.userId,
-      githubId: payload.githubId,
-    };
-  } catch (error) {
-    console.error('Error decoding JWT:', error);
-    return null;
-  }
-}
-
-function notifyPopup(message) {
-  chrome.runtime.sendMessage(message).catch(() => {
-    // Popup may not be open
-    console.log('Popup not open, message queued');
-  });
-}
+const config = self.__MomentumConfig;
+const ACTIONS = config.MESSAGE_ACTIONS;
+const storage = self.__MomentumStorage;
+const jwt = self.__MomentumJWT;
+const oauth = self.__MomentumOAuth;
 
 // ═══════════════════════════════════════════════════════════════════════
 // UNIFIED MESSAGE HANDLER
@@ -88,75 +23,104 @@ function notifyPopup(message) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Popup OAuth request
-  if (request.action === 'PERFORM_OAUTH') {
-    performOAuth(sendResponse);
-    return true;
+  if (request.action === ACTIONS.PERFORM_OAUTH) {
+    oauth.performOAuth(sendResponse);
+    return true; // keep channel open
   }
 
   // Token request
-  if (request.action === 'GET_TOKEN') {
-    chrome.storage.local.get(['token', 'accessToken'], (result) => {
-      sendResponse({ token: result.token || result.accessToken || null });
+  if (request.action === ACTIONS.GET_TOKEN) {
+    storage.getTokens().then((tokens) => {
+      sendResponse({ token: tokens.accessToken || null });
     });
     return true;
   }
 
+  // Status check for content scripts & popup
+  if (request.action === ACTIONS.GET_STATUS) {
+    storage.getUser().then((user) => {
+      sendResponse({ isAuthenticated: !!user, user });
+    });
+    return true;
+  }
+
+  // One-Login Sync from website (via content.js)
+  if (request.action === ACTIONS.SYNC_AUTH) {
+    if (request.token) {
+      const user = jwt.decodeJWT(request.token);
+      storage.setAuthData({
+        token: request.token,
+        accessToken: request.token,
+        refreshToken: request.refreshToken,
+        user
+      }).then(() => {
+        console.log('[Momentum] Auth synced from website');
+        sendResponse({ success: true, user });
+      });
+    } else {
+      // Logout sync
+      storage.clearAuthData().then(() => {
+        console.log('[Momentum] Auth cleared (sync from website)');
+        sendResponse({ success: true });
+      });
+    }
+    return true;
+  }
+
   // Logout request
-  if (request.action === 'LOGOUT') {
-    chrome.storage.local.remove(['token', 'accessToken', 'refreshToken', 'user'], () => {
+  if (request.action === ACTIONS.LOGOUT) {
+    storage.clearAuthData().then(() => {
       sendResponse({ success: true });
     });
     return true;
   }
 
   // Activity pipeline
-  if (request.type === 'PROBLEM_SOLVED') {
-    MomentumLogger.info('PROBLEM_SOLVED received:', request.data.problemTitle);
+  if (request.type === ACTIONS.PROBLEM_SOLVED) {
+    self.MomentumLogger.info('PROBLEM_SOLVED received:', request.data.problemTitle);
 
-    ActivityManager.handleActivity(request.data)
+    self.ActivityManager.handleActivity(request.data)
       .then((result) => {
         sendResponse({ success: true, result });
       })
       .catch((err) => {
-        MomentumLogger.error('Activity handling failed:', err.message);
+        self.MomentumLogger.error('Activity handling failed:', err.message);
         sendResponse({ success: false });
       });
 
     return true; // keep message channel open for async response
   }
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-// STORAGE CHANGE LISTENER
-// ═══════════════════════════════════════════════════════════════════════
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local') {
-    if (changes.token) {
-      console.log('Token updated in storage');
-    }
-    if (changes.accessToken) {
-      console.log('Access token updated in storage');
-    }
-    if (changes.user) {
-      console.log('User info updated in storage');
-    }
+  
+  // Flush queue
+  if (request.type === ACTIONS.FLUSH_QUEUE) {
+    self.MomentumLogger.info('FLUSH_QUEUE received from content script');
+    self.ActivityManager.flushQueue();
+    sendResponse({ success: true });
+    return false; // synchronous response
   }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// QUEUE FLUSH — On startup + periodic alarm
+// QUEUE FLUSH — On startup + periodic alarm + network online
 // ═══════════════════════════════════════════════════════════════════════
 
-// Flush on service worker startup
-ActivityManager.flushQueue();
+// Flush on network online event (if SW is awake)
+self.addEventListener('online', () => {
+  self.MomentumLogger.info('Service worker detected online event — flushing queue');
+  self.ActivityManager.flushQueue();
+});
 
-// Periodic flush every 5 minutes
-chrome.alarms.create('momentumFlushQueue', { periodInMinutes: 5 });
+// Flush on service worker startup
+self.ActivityManager.flushQueue();
+
+// Periodic flush
+chrome.alarms.create(config.ALARM_NAMES.FLUSH_QUEUE, {
+  periodInMinutes: config.TIMING.FLUSH_INTERVAL_MINUTES
+});
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'momentumFlushQueue') {
-    MomentumLogger.debug('Alarm triggered — flushing queue');
-    ActivityManager.flushQueue();
+  if (alarm.name === config.ALARM_NAMES.FLUSH_QUEUE) {
+    self.MomentumLogger.debug('Alarm triggered — flushing queue');
+    self.ActivityManager.flushQueue();
   }
 });

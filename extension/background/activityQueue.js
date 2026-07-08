@@ -2,11 +2,26 @@
  * Offline Activity Queue
  * Persists failed activities to chrome.storage.local for retry.
  * Auto-cleans to prevent unbounded storage growth.
+ *
+ * Requires:
+ *   config/constants.js        (self.__MomentumConfig)
+ *   background/logger.js       (self.MomentumLogger)
  */
 (function () {
   const log = self.MomentumLogger;
-  const STORAGE_KEY = 'pendingActivities';
-  const MAX_QUEUE_SIZE = 50;
+  const config = self.__MomentumConfig;
+  const STORAGE_KEY = config.STORAGE_KEYS.PENDING_ACTIVITIES;
+  const MAX_QUEUE_SIZE = config.TIMING.MAX_QUEUE_SIZE;
+  const STATUS_KEY = config.STORAGE_KEYS.SYNC_STATUS;
+
+  async function updatePendingCount(count) {
+    const res = await chrome.storage.local.get(STATUS_KEY);
+    const status = res[STATUS_KEY] || { state: 'Idle', lastSuccess: null, lastError: null, pendingCount: 0 };
+    if (status.pendingCount !== count) {
+      status.pendingCount = count;
+      await chrome.storage.local.set({ [STATUS_KEY]: status });
+    }
+  }
 
   self.ActivityQueue = {
     async getAll() {
@@ -29,6 +44,7 @@
       }
 
       await chrome.storage.local.set({ [STORAGE_KEY]: queue });
+      await updatePendingCount(queue.length);
       log.info('Queued offline activity:', activity.problemTitle);
     },
 
@@ -37,6 +53,7 @@
       if (index >= 0 && index < queue.length) {
         queue.splice(index, 1);
         await chrome.storage.local.set({ [STORAGE_KEY]: queue });
+        await updatePendingCount(queue.length);
       }
     },
 
@@ -50,6 +67,7 @@
 
     async clear() {
       await chrome.storage.local.set({ [STORAGE_KEY]: [] });
+      await updatePendingCount(0);
       log.info('Queue cleared');
     },
 

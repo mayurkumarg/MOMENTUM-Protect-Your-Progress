@@ -27,6 +27,8 @@ coverage/
 # Build output
 dist/
 build/
+dist-extension/
+momentum-sync-*.zip
 
 # OS and editor files
 .DS_Store

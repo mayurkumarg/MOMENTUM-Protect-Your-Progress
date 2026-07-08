@@ -4,7 +4,9 @@
   "main": "backend/server.js",
   "scripts": {
     "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js"
+    "dev": "nodemon backend/server.js",
+    "build:ext": "node scripts/build-extension.js --env=development",
+    "build:ext:prod": "node scripts/build-extension.js --env=production"
   },
   "keywords": [],
   "author": "",

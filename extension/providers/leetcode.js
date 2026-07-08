@@ -1,9 +1,13 @@
 /**
  * LeetCode Platform Adapter
  * Detects accepted submissions and extracts problem data.
+ *
+ * Requires: shared/dom-utils.js (self.__MomentumDOMUtils)
  */
 (function () {
   if (!self.__MomentumPlatforms) self.__MomentumPlatforms = {};
+
+  const { normalizeText, isElementVisible, collectVisibleText } = self.__MomentumDOMUtils;
 
   const RESULT_SELECTORS = [
     '[data-e2e-locator*="submission"]',
@@ -17,34 +21,6 @@
     '[class*="memory"]',
     '[role="dialog"]',
   ];
-
-  function normalize(text) {
-    return (text || '').replace(/\s+/g, ' ').trim();
-  }
-
-  function isVisible(el) {
-    if (!el || !el.isConnected) return false;
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function collectVisibleResultText() {
-    const pieces = [];
-    const seen = new Set();
-
-    for (const selector of RESULT_SELECTORS) {
-      for (const el of document.querySelectorAll(selector)) {
-        if (seen.has(el) || !isVisible(el)) continue;
-        seen.add(el);
-        const text = normalize(el.textContent);
-        if (text) pieces.push(text);
-      }
-    }
-
-    return pieces.join(' ');
-  }
 
   function getSlugFromUrl() {
     const match = window.location.pathname.match(/\/problems\/([^/]+)/i);
@@ -61,7 +37,7 @@
     },
 
     isSubmitElement(element) {
-      const text = normalize(`${element.innerText || ''} ${element.value || ''} ${element.getAttribute('aria-label') || ''}`);
+      const text = normalizeText(`${element.innerText || ''} ${element.value || ''} ${element.getAttribute('aria-label') || ''}`);
       if (!/\bsubmit\b/i.test(text)) return false;
 
       const runOnly = /\brun\b/i.test(text) && !/\bsubmit\b/i.test(text);
@@ -76,7 +52,7 @@
 
     mutationLooksRelevant(mutations) {
       for (const mutation of mutations || []) {
-        const text = normalize(mutation.target && mutation.target.textContent);
+        const text = normalizeText(mutation.target && mutation.target.textContent);
         if (/accepted|runtime|memory|beats|testcases passed|submission/i.test(text)) return true;
       }
       return false;
@@ -84,9 +60,9 @@
 
     detectSolve(context = {}) {
       const signals = [];
-      const resultText = collectVisibleResultText();
-      const bodyText = normalize(document.body ? document.body.textContent : '');
-      const text = normalize(`${resultText} ${bodyText}`);
+      const resultText = collectVisibleText(RESULT_SELECTORS);
+      const bodyText = normalizeText(document.body ? document.body.textContent : '');
+      const text = normalizeText(`${resultText} ${bodyText}`);
 
       const hasAccepted = /\bAccepted\b/i.test(text);
       const hasRuntime = /\bRuntime\b/i.test(text);
@@ -137,8 +113,8 @@
         document.querySelector('a[href*="/problems/"][class*="title"]') ||
         document.querySelector('h1');
 
-      const titleFromHeading = normalize(heading && heading.textContent).replace(/^\d+\.\s*/, '');
-      const titleFromDocument = normalize(document.title).replace(/\s+-\s+LeetCode.*$/i, '');
+      const titleFromHeading = normalizeText(heading && heading.textContent).replace(/^\d+\.\s*/, '');
+      const titleFromDocument = normalizeText(document.title).replace(/\s+-\s+LeetCode.*$/i, '');
       const titleFromSlug = slug
         .split('-')
         .filter(Boolean)

@@ -1,9 +1,13 @@
 /**
  * GeeksForGeeks Platform Adapter
  * Detects accepted submissions and extracts problem data.
+ *
+ * Requires: shared/dom-utils.js (self.__MomentumDOMUtils)
  */
 (function () {
   if (!self.__MomentumPlatforms) self.__MomentumPlatforms = {};
+
+  const { normalizeText, collectVisibleText } = self.__MomentumDOMUtils;
 
   const RESULT_SELECTORS = [
     '.result-status',
@@ -17,34 +21,6 @@
     '[role="dialog"]',
     '[role="alert"]',
   ];
-
-  function normalize(text) {
-    return (text || '').replace(/\s+/g, ' ').trim();
-  }
-
-  function isVisible(el) {
-    if (!el || !el.isConnected) return false;
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function collectVisibleResultText() {
-    const pieces = [];
-    const seen = new Set();
-
-    for (const selector of RESULT_SELECTORS) {
-      for (const el of document.querySelectorAll(selector)) {
-        if (seen.has(el) || !isVisible(el)) continue;
-        seen.add(el);
-        const text = normalize(el.textContent);
-        if (text) pieces.push(text);
-      }
-    }
-
-    return pieces.join(' ');
-  }
 
   function getSlugFromUrl() {
     const match = window.location.pathname.match(/\/problems\/([^/]+)/i);
@@ -61,13 +37,13 @@
     },
 
     isSubmitElement(element) {
-      const text = normalize(`${element.innerText || ''} ${element.value || ''} ${element.getAttribute('aria-label') || ''}`);
+      const text = normalizeText(`${element.innerText || ''} ${element.value || ''} ${element.getAttribute('aria-label') || ''}`);
       return /\bsubmit\b/i.test(text);
     },
 
     mutationLooksRelevant(mutations) {
       for (const mutation of mutations || []) {
-        const text = normalize(mutation.target && mutation.target.textContent);
+        const text = normalizeText(mutation.target && mutation.target.textContent);
         if (/accepted|correct answer|problem solved successfully|time taken|result|submission/i.test(text)) return true;
       }
       return false;
@@ -75,9 +51,9 @@
 
     detectSolve() {
       const signals = [];
-      const resultText = collectVisibleResultText();
-      const bodyText = normalize(document.body ? document.body.textContent : '');
-      const text = normalize(`${resultText} ${bodyText}`);
+      const resultText = collectVisibleText(RESULT_SELECTORS);
+      const bodyText = normalizeText(document.body ? document.body.textContent : '');
+      const text = normalizeText(`${resultText} ${bodyText}`);
 
       const solvedSuccessfully = /problem solved successfully/i.test(text);
       const correctAnswer = /\bcorrect answer\b/i.test(text);
@@ -109,10 +85,10 @@
     extractProblemData() {
       const slug = getSlugFromUrl();
       const titleFromHeading =
-        normalize(document.querySelector('h1') && document.querySelector('h1').textContent) ||
-        normalize(document.querySelector('[class*="problemTitle"]') && document.querySelector('[class*="problemTitle"]').textContent);
+        normalizeText(document.querySelector('h1') && document.querySelector('h1').textContent) ||
+        normalizeText(document.querySelector('[class*="problemTitle"]') && document.querySelector('[class*="problemTitle"]').textContent);
 
-      const titleFromDocument = normalize(document.title)
+      const titleFromDocument = normalizeText(document.title)
         .replace(/\s*\|\s*Practice\s*\|\s*GeeksforGeeks.*$/i, '')
         .replace(/\s*-\s*GeeksforGeeks.*$/i, '');
 

@@ -1,15 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Momentum - Task Manager",
+  "name": "Momentum Sync",
   "version": "1.0.0",
-  "description": "Task management extension with GitHub OAuth",
+  "description": "Seamlessly sync your DSA progress to Momentum",
 
   "permissions": [
     "identity",
     "storage",
-    "activeTab",
-    "alarms",
-    "tabs"
+    "alarms"
   ],
 
   "host_permissions": [
@@ -29,8 +27,15 @@
 
   "content_scripts": [
     {
-      "matches": ["http://localhost:3000/*"],
-      "js": ["content.js"]
+      "matches": [
+        "http://localhost:5173/*",
+        "https://momentum-sync.com/*"
+      ],
+      "js": [
+        "config/env.js",
+        "config/constants.js",
+        "content/content.js"
+      ]
     },
     {
       "matches": [
@@ -47,14 +52,17 @@
         "https://www.interviewbit.com/problems/*"
       ],
       "js": [
-        "platforms/leetcode.js",
-        "platforms/gfg.js",
-        "platforms/codeforces.js",
-        "platforms/hackerrank.js",
-        "platforms/codechef.js",
-        "platforms/atcoder.js",
-        "platforms/interviewbit.js",
-        "content-script.js"
+        "config/env.js",
+        "config/constants.js",
+        "shared/dom-utils.js",
+        "providers/leetcode.js",
+        "providers/gfg.js",
+        "providers/codeforces.js",
+        "providers/hackerrank.js",
+        "providers/codechef.js",
+        "providers/atcoder.js",
+        "providers/interviewbit.js",
+        "content/content-script.js"
       ],
       "run_at": "document_idle"
     }
