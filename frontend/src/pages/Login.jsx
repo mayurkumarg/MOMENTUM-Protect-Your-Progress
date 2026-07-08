@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Mail, Eye, EyeOff, Github, Loader, AlertCircle } from 'lucide-react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Mail, Eye, EyeOff, Github, Loader, AlertCircle, Info } from 'lucide-react'
 import { Button } from '../components/ui'
 import { useAuth } from '../auth/AuthProvider'
 import { validateLogin } from '../auth/validation'
@@ -8,8 +8,9 @@ import { getGithubLoginUrl } from '../api/auth'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { setSession } = useAuth()
+  const { setSession, reason } = useAuth()
 
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({})
@@ -49,8 +50,8 @@ export default function LoginPage() {
       const response = await loginUser(formData.email, formData.password)
 
       setSession(response)
-      const returnTo = searchParams.get('returnTo') || '/overview'
-      navigate(returnTo)
+      const returnTo = location.state?.from?.pathname || searchParams.get('returnTo') || '/overview'
+      navigate(returnTo, { replace: true })
     } catch (err) {
       setServerError(err.message || 'Login failed. Please try again.')
     } finally {
@@ -67,6 +68,13 @@ export default function LoginPage() {
           <h1 className="text-3xl font-extrabold text-ink">Welcome back</h1>
           <p className="text-sm text-muted">Sign in to your Momentum account</p>
         </div>
+
+        {reason === 'expired' && !serverError && (
+          <div className="flex gap-3 rounded-lg border border-line bg-surface-subtle p-3">
+            <Info className="size-5 shrink-0 text-muted" />
+            <p className="text-sm text-muted">Your session expired. Please sign in again.</p>
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">

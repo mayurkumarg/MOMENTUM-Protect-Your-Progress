@@ -154,7 +154,6 @@ export async function apiRequest(path, { method = 'GET', params, body, headers =
       if (response.status === 401 && auth) {
         const refreshed = await refreshAccessToken()
         if (refreshed) {
-          const newToken = tokenProvider()
           return apiRequest(path, { method, params, body, headers, auth })
         }
         unauthorizedHandler(new ApiError('Unauthorized', { status: 401, details: payload }))
@@ -167,6 +166,10 @@ export async function apiRequest(path, { method = 'GET', params, body, headers =
     return payload?.success === true && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
   } catch (err) {
     if (err instanceof ApiError) throw err
+    if (err instanceof TypeError) {
+      // fetch() itself failed — offline, DNS failure, backend unreachable, etc.
+      throw new ApiError("Momentum couldn't reach the server. Check your connection and try again.", { details: err })
+    }
     throw new ApiError(err.message || 'Failed to make API request', { details: err })
   }
 }

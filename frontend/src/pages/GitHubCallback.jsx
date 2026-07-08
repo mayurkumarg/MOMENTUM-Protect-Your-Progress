@@ -14,7 +14,7 @@ export default function GitHubCallback() {
   useEffect(() => {
     async function handleCallback() {
       try {
-        const token = searchParams.get('token')
+        const token = searchParams.get('token') || searchParams.get('accessToken') || searchParams.get('jwt')
         const refreshToken = searchParams.get('refreshToken')
         const errorParam = searchParams.get('error')
 

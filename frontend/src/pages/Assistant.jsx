@@ -15,9 +15,16 @@ export default function Assistant() {
 
   const handleSendMessage = (e) => {
     e.preventDefault()
+    if (!message.trim()) return
     setShowComingSoon(true)
-    setMessage('')
     setTimeout(() => setShowComingSoon(false), 3000)
+  }
+
+  const handleTextareaKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage(e)
+    }
   }
 
   return (
@@ -36,7 +43,7 @@ export default function Assistant() {
           </div>
           <div className="border-t border-line bg-surface-subtle p-3 sm:p-4">
             <form onSubmit={handleSendMessage} className="flex items-end gap-2 rounded-lg border border-line bg-surface p-2">
-              <textarea rows="2" placeholder="Ask about your workload..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-11 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-copy outline-none placeholder:text-faint" />
+              <textarea rows="2" placeholder="Ask about your workload..." value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={handleTextareaKeyDown} className="min-h-11 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-copy outline-none placeholder:text-faint" />
               <Button type="submit" icon={ArrowUp} aria-label="Send message" className="size-10 px-0"><span className="sr-only">Send</span></Button>
             </form>
             <p className="mt-2 text-center text-[11px] text-faint">Assistant guidance will be available after AI integration is configured.</p>

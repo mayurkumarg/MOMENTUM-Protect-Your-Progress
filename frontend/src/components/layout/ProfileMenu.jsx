@@ -3,10 +3,12 @@ import { LogOut, User } from 'lucide-react'
 import { useAuth } from '../../auth/AuthProvider'
 import { useLogout } from '../../auth/hooks'
 import { useNavigate } from 'react-router-dom'
+import ConfirmDialog from '../ConfirmDialog'
 
 export default function ProfileMenu() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const menuRef = useRef(null)
   const { user } = useAuth()
   const { logout } = useLogout()
@@ -25,11 +27,21 @@ export default function ProfileMenu() {
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) return undefined
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
+
   const handleLogout = async () => {
     setLoading(true)
     await logout()
     setLoading(false)
     setOpen(false)
+    setShowSignOutConfirm(false)
     navigate('/login')
   }
 
@@ -71,15 +83,24 @@ export default function ProfileMenu() {
           </button>
 
           <button
-            onClick={handleLogout}
-            disabled={loading}
+            onClick={() => setShowSignOutConfirm(true)}
             className="flex w-full items-center gap-3 border-t border-line px-4 py-2.5 text-sm font-medium text-coral hover:bg-coral/5 transition-colors disabled:opacity-50"
           >
             <LogOut size={16} />
-            {loading ? 'Signing out...' : 'Sign out'}
+            Sign out
           </button>
         </div>
       )}
+      <ConfirmDialog
+        open={showSignOutConfirm}
+        title="Sign out?"
+        description="You'll need to log in again to access your workspace."
+        confirmLabel="Sign out"
+        tone="danger"
+        isLoading={loading}
+        onConfirm={handleLogout}
+        onCancel={() => setShowSignOutConfirm(false)}
+      />
     </div>
   )
 }
