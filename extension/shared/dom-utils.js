@@ -42,10 +42,29 @@
     return null;
   }
 
+  // Parses a duration string like "2m 35s", "18m 12s", "1h 05m", or "45s" into
+  // total seconds. Returns null if no hour/minute/second component is found.
+  function parseDurationTextToSeconds(text) {
+    if (!text) return null;
+    const normalized = String(text).trim();
+    const hoursMatch = normalized.match(/(\d+)\s*h/i);
+    const minutesMatch = normalized.match(/(\d+)\s*m(?!s)/i);
+    const secondsMatch = normalized.match(/(\d+)\s*s/i);
+
+    if (!hoursMatch && !minutesMatch && !secondsMatch) return null;
+
+    const hours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+    const minutes = minutesMatch ? parseInt(minutesMatch[1], 10) : 0;
+    const seconds = secondsMatch ? parseInt(secondsMatch[1], 10) : 0;
+
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
   self.__MomentumDOMUtils = {
     normalizeText,
     isElementVisible,
     collectVisibleText,
     findVisibleElementByText,
+    parseDurationTextToSeconds,
   };
 })();

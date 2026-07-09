@@ -8,7 +8,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, 
 import { useActivities } from '../hooks/useActivities'
 import { useTasks } from '../hooks/useTasks'
 import { useWorkload } from '../hooks/useWorkload'
-import { formatDateTime, formatMinutes, getGreeting } from '../utils/format'
+import { formatActivityDuration, formatDateTime, getGreeting } from '../utils/format'
 import { mapTaskToWorkItem, splitTasks } from '../utils/tasks'
 
 function ActivityPreview({ activities }) {
@@ -18,16 +18,19 @@ function ActivityPreview({ activities }) {
 
   return (
     <Card className="divide-y divide-line overflow-hidden">
-      {activities.slice(0, 5).map((activity) => (
-        <div key={activity.id} className="flex min-w-0 items-center gap-3 px-4 py-3.5 sm:px-5">
-          <div className="grid size-9 shrink-0 place-items-center rounded-md bg-accent-soft text-accent"><Code2 size={16} /></div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-copy">{activity.title}</p>
-            <p className="mt-0.5 truncate text-xs text-faint">{activity.metadata?.platform || activity.source} · {formatDateTime(activity.activityDate)}</p>
+      {activities.slice(0, 5).map((activity) => {
+        const duration = formatActivityDuration(activity)
+        return (
+          <div key={activity.id} className="flex min-w-0 items-center gap-3 px-4 py-3.5 sm:px-5">
+            <div className="grid size-9 shrink-0 place-items-center rounded-md bg-accent-soft text-accent"><Code2 size={16} /></div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-copy">{activity.title}</p>
+              <p className="mt-0.5 truncate text-xs text-faint">{activity.metadata?.platform || activity.source} · {formatDateTime(activity.activityDate)}</p>
+            </div>
+            <Badge tone="neutral">{duration.label}{duration.isEstimated ? ' (est.)' : ''}</Badge>
           </div>
-          <Badge tone="neutral">{formatMinutes(activity.durationMinutes)}</Badge>
-        </div>
-      ))}
+        )
+      })}
     </Card>
   )
 }

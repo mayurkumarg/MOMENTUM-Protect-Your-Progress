@@ -17,4 +17,11 @@ router.use(authMiddleware);
  */
 router.post('/activity', dsaActivityController.createDsaActivity);
 
+/**
+ * GET /api/dsa/summary
+ *
+ * Today's DSA activity snapshot for the "Coding Summary" dashboard section.
+ */
+router.get('/summary', dsaActivityController.getDsaSummary);
+
 module.exports = router;

@@ -46,6 +46,20 @@ const activitySchema = new Schema(
       min: [1, 'Activity duration must be at least 1 minute.'],
       max: [1440, 'Activity duration cannot exceed 1440 minutes.'],
     },
+    // Precise duration when we have it (e.g. read from the platform's own timer).
+    // Absent on older records and on wall-clock estimates — durationMinutes above
+    // stays the field every existing consumer already reads.
+    durationSeconds: {
+      type: Number,
+      min: [1, 'Duration in seconds must be at least 1.'],
+    },
+    // Whether durationMinutes/durationSeconds came from an authoritative source
+    // (the platform's own timer) or our own estimate. Defaults true since older
+    // records' hardcoded duration was never a real measurement either.
+    isEstimatedDuration: {
+      type: Boolean,
+      default: true,
+    },
     activityDate: {
       type: Date,
       required: true,

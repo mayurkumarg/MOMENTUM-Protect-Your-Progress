@@ -501,7 +501,19 @@ console.log('[Momentum] Content script loaded');
     data.platform = data.platform || adapter.name;
     data.url = data.url || window.location.href;
     data.solvedAt = data.solvedAt || new Date().toISOString();
-    data.durationMinutes = await computeDurationMinutes(problemKey);
+
+    // Prefer the platform's own elapsed-time display (real clock) over our wall-clock
+    // estimate; fall back and mark as estimated when the platform doesn't show one.
+    const timerSeconds = typeof adapter.extractTimerSeconds === 'function' ? adapter.extractTimerSeconds() : null;
+    if (Number.isFinite(timerSeconds) && timerSeconds > 0) {
+      data.durationSeconds = timerSeconds;
+      data.durationMinutes = clampDuration(Math.round(timerSeconds / 60));
+      data.isEstimatedDuration = false;
+    } else {
+      data.durationMinutes = await computeDurationMinutes(problemKey);
+      data.isEstimatedDuration = true;
+    }
+
     data.detection = {
       reason: detection.reason || 'accepted indicators found',
       signals: detection.signals || [],

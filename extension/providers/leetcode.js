@@ -7,7 +7,7 @@
 (function () {
   if (!self.__MomentumPlatforms) self.__MomentumPlatforms = {};
 
-  const { normalizeText, isElementVisible, collectVisibleText } = self.__MomentumDOMUtils;
+  const { normalizeText, isElementVisible, collectVisibleText, findVisibleElementByText, parseDurationTextToSeconds } = self.__MomentumDOMUtils;
 
   const RESULT_SELECTORS = [
     '[data-e2e-locator*="submission"]',
@@ -22,9 +22,43 @@
     '[role="dialog"]',
   ];
 
+  // Best-effort — LeetCode's supported language list, matched exactly so we don't
+  // pick up unrelated UI text. Not exhaustive; unmatched languages just come back null.
+  const KNOWN_LANGUAGES = [
+    'C++', 'Java', 'Python', 'Python3', 'C', 'C#', 'JavaScript', 'TypeScript', 'PHP',
+    'Swift', 'Kotlin', 'Dart', 'Go', 'Golang', 'Ruby', 'Scala', 'Rust', 'Racket',
+    'Erlang', 'Elixir', 'MySQL', 'MS SQL Server', 'Oracle', 'Bash',
+  ];
+
+  function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   function getSlugFromUrl() {
     const match = window.location.pathname.match(/\/problems\/([^/]+)/i);
     return match ? match[1] : '';
+  }
+
+  // Reads LeetCode's own elapsed-time display (e.g. "Your Time: 2m 35s") rather than
+  // guessing from our own page-load timer — this is the platform's real clock.
+  function extractTimerSeconds() {
+    const text = normalizeText(collectVisibleText(['div', 'span', 'button']));
+    const match = text.match(/your\s*time\s*:?\s*((?:\d+\s*h\s*)?(?:\d+\s*m\s*)?(?:\d+\s*s)?)/i);
+    if (!match || !match[1] || !match[1].trim()) return null;
+    return parseDurationTextToSeconds(match[1]);
+  }
+
+  function extractDifficulty() {
+    const el = findVisibleElementByText(/^(Easy|Medium|Hard)$/i, ['div', 'span', 'a', 'button']);
+    if (!el) return null;
+    const text = normalizeText(el.textContent);
+    return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+  }
+
+  function extractLanguage() {
+    const pattern = new RegExp(`^(${KNOWN_LANGUAGES.map(escapeRegExp).join('|')})\\s*(?:\\(.*\\))?$`, 'i');
+    const el = findVisibleElementByText(pattern, ['button', 'div', 'span']);
+    return el ? normalizeText(el.textContent) : null;
   }
 
   self.__MomentumPlatforms.leetcode = {
@@ -106,6 +140,8 @@
       };
     },
 
+    extractTimerSeconds,
+
     extractProblemData() {
       const slug = getSlugFromUrl();
       const heading =
@@ -127,6 +163,8 @@
         problemSlug: slug,
         url: window.location.href,
         solvedAt: new Date().toISOString(),
+        difficulty: extractDifficulty(),
+        language: extractLanguage(),
       };
     },
   };

@@ -32,6 +32,29 @@ export function formatMinutes(minutes) {
   return remaining ? `${hours}h ${remaining}m` : `${hours}h`
 }
 
+export function formatDurationHuman(seconds) {
+  if (!seconds || seconds < 1) return null
+  const totalSeconds = Math.round(seconds)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const secs = totalSeconds % 60
+
+  if (hours > 0) return minutes ? `${hours}h ${minutes}m` : `${hours}h`
+  if (minutes > 0) return secs ? `${minutes}m ${secs}s` : `${minutes}m`
+  return `${secs}s`
+}
+
+// Prefers the precise durationSeconds when available, falls back to the
+// coarser durationMinutes otherwise — and reports whether the value is a
+// real measurement or our own estimate, so callers can mark it as such.
+export function formatActivityDuration(activity) {
+  const fromSeconds = activity?.durationSeconds ? formatDurationHuman(activity.durationSeconds) : null
+  return {
+    label: fromSeconds || formatMinutes(activity?.durationMinutes),
+    isEstimated: activity?.isEstimatedDuration !== false,
+  }
+}
+
 export function getGreeting(date = new Date()) {
   const hour = date.getHours()
   if (hour < 5) return 'Good night.'

@@ -1,13 +1,17 @@
-import { Chrome, Code2, Github, LoaderCircle, Plus, Trash2 } from 'lucide-react'
+import { Chrome, Code2, Github, LoaderCircle, Plus, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 import { useToast } from '../components/ToastProvider'
+import { StatTile } from '../components/AnalyticsCharts'
 import { Badge, Button, Card, EmptyState, ErrorState, IconButton, Input, LoadingState, PageHeader, Section } from '../components/ui'
 import { useActivities } from '../hooks/useActivities'
+import { useDsaSummary } from '../hooks/useDsaSummary'
 import { useExtension } from '../hooks/useExtension'
-import { formatDateTime, formatMinutes, toDateTimeInputValue } from '../utils/format'
+import { formatActivityDuration, formatDateTime, formatDurationHuman, toDateTimeInputValue } from '../utils/format'
+
+const DIFFICULTY_TONE = { Easy: 'green', Medium: 'yellow', Hard: 'coral' }
 
 const getSources = (extension) => [
   { icon: Github, title: 'GitHub', detail: 'Commits and meaningful repository activity', status: 'Backend ready', action: 'connect-github' },
@@ -86,6 +90,7 @@ function LogActivityModal({ open, onClose, onSubmit, isSaving }) {
 function ActivityRow({ activity, onDelete, isPending }) {
   const platform = activity.metadata?.platform || activity.source || 'Manual'
   const url = activity.metadata?.url
+  const duration = formatActivityDuration(activity)
 
   return (
     <div className="group flex min-w-0 gap-4 border-b border-line px-4 py-4 last:border-0 sm:px-5">
@@ -95,7 +100,7 @@ function ActivityRow({ activity, onDelete, isPending }) {
           <p className="truncate text-sm font-semibold text-copy">{activity.title}</p>
           <Badge tone="green">{platform}</Badge>
         </div>
-        <p className="mt-1 text-xs text-faint">{formatDateTime(activity.activityDate)} · {formatMinutes(activity.durationMinutes)}</p>
+        <p className="mt-1 text-xs text-faint">{formatDateTime(activity.activityDate)} · {duration.label}{duration.isEstimated ? ' (est.)' : ''}</p>
         {url && <a className="mt-2 block truncate text-xs font-semibold text-accent hover:underline" href={url} target="_blank" rel="noreferrer">{url}</a>}
       </div>
       {onDelete && (
@@ -111,10 +116,65 @@ function ActivityRow({ activity, onDelete, isPending }) {
   )
 }
 
+function RecentSolveRow({ solve }) {
+  const duration = formatActivityDuration(solve)
+  return (
+    <div className="flex min-w-0 items-center gap-3 border-b border-line px-4 py-3 last:border-0 sm:px-5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-copy">{solve.title}</p>
+        <p className="mt-0.5 text-xs text-faint">{solve.platform}</p>
+      </div>
+      <span className="shrink-0 text-xs font-semibold text-muted">{duration.label}{duration.isEstimated ? ' (est.)' : ''}</span>
+    </div>
+  )
+}
+
+function CodingSummarySection({ summary, isLoading, error, onRetry }) {
+  if (isLoading) {
+    return <Card><LoadingState label="Reading today's activity" /></Card>
+  }
+
+  if (error) {
+    return <Card><ErrorState title="Coding summary could not load" description={error.message} action={<Button variant="secondary" onClick={onRetry}>Retry</Button>} /></Card>
+  }
+
+  if (!summary || summary.problemsSolvedToday === 0) {
+    return <Card><EmptyState compact icon={Zap} title="No problems solved yet today" description="Solve something on a connected platform and it'll show up here." /></Card>
+  }
+
+  const { problemsSolvedToday, totalMinutesToday, avgSolveSeconds, fastestSolve, slowestSolve, difficultyCounts, platformCounts, recent } = summary
+  const platformEntries = Object.entries(platformCounts).filter(([, count]) => count > 0)
+  const difficultyEntries = Object.entries(difficultyCounts).filter(([, count]) => count > 0)
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatTile label="Solved today" value={problemsSolvedToday} />
+        <StatTile label="Time today" value={formatDurationHuman(totalMinutesToday * 60) || '0m'} />
+        <StatTile label="Avg solve" value={formatDurationHuman(avgSolveSeconds) || '—'} />
+        <StatTile label="Fastest solve" value={fastestSolve ? formatActivityDuration(fastestSolve).label : '—'} deltaLabel={fastestSolve?.title} />
+        <StatTile label="Slowest solve" value={slowestSolve ? formatActivityDuration(slowestSolve).label : '—'} deltaLabel={slowestSolve?.title} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {difficultyEntries.map(([difficulty, count]) => (
+          <Badge key={difficulty} tone={DIFFICULTY_TONE[difficulty] || 'neutral'}>{difficulty}: {count}</Badge>
+        ))}
+        {platformEntries.map(([platform, count]) => (
+          <Badge key={platform} tone="neutral">{platform}: {count}</Badge>
+        ))}
+      </div>
+      <Card className="overflow-hidden">
+        {recent.map((solve, index) => <RecentSolveRow key={`${solve.title}-${index}`} solve={solve} />)}
+      </Card>
+    </div>
+  )
+}
+
 export default function Activity() {
   const navigate = useNavigate()
   const toast = useToast()
   const { activities, isLoading, error, refetch, addActivity, removeActivity } = useActivities()
+  const dsaSummaryQuery = useDsaSummary()
   const extension = useExtension()
   const [showLogModal, setShowLogModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -164,6 +224,14 @@ export default function Activity() {
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Observe" title="Activity" description="A trustworthy record of the work you actually did, captured with minimal effort." actions={<Button variant="secondary" icon={Plus} onClick={() => setShowLogModal(true)}>Log activity</Button>} />
+      <Section title="Coding summary" description="Today's DSA practice, at a glance.">
+        <CodingSummarySection
+          summary={dsaSummaryQuery.summary}
+          isLoading={dsaSummaryQuery.isLoading}
+          error={dsaSummaryQuery.error}
+          onRetry={() => dsaSummaryQuery.refetch().catch((retryError) => toast.error(retryError.message || 'Still unable to load.'))}
+        />
+      </Section>
       <Section title="Connected sources" description="Choose which signals Momentum can use to understand your progress.">
         <div className="grid gap-4 md:grid-cols-2">
           {sources.map(({ icon: Icon, title, detail, status, action, connected }) => <Card key={title} className="flex items-start gap-4 p-5"><div className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={19} /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="font-display text-[15px] font-bold">{title}</p><Badge tone={connected ? "green" : undefined}>{status}</Badge></div><p className="mt-1.5 text-sm leading-5 text-muted">{detail}</p>{action && <Button variant="ghost" className="mt-3 h-8 px-0 text-accent" onClick={() => handleConnectSource(action)}>Connect source</Button>}</div></Card>)}
