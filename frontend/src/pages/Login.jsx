@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Mail, Eye, EyeOff, Github, Loader, AlertCircle, Info } from 'lucide-react'
 import { Button } from '../components/ui'
+import { Logo } from '../components/Logo'
 import { useAuth } from '../auth/AuthProvider'
 import { validateLogin } from '../auth/validation'
 import { getGithubLoginUrl } from '../api/auth'
@@ -64,9 +65,12 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
       <div className="w-full max-w-md space-y-8">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-extrabold text-ink">Welcome back</h1>
-          <p className="text-sm text-muted">Sign in to your Momentum account</p>
+        <div className="flex flex-col items-center gap-5 text-center">
+          <Logo size={48} />
+          <div className="space-y-2">
+            <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">Welcome back</h1>
+            <p className="text-sm text-muted">Sign in to your Momentum account</p>
+          </div>
         </div>
 
         {reason === 'expired' && !serverError && (

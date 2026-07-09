@@ -11,6 +11,29 @@ export function formatDateTime(value) {
   }).format(date)
 }
 
+export function formatTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
+}
+
+// "Today" / "Yesterday" / a short date — for grouping a chronological feed by day.
+export function formatDayLabel(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) return 'Today'
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+
+  return new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'short', day: 'numeric' }).format(date)
+}
+
 export function formatDate(value) {
   if (!value) return 'No deadline'
   const date = new Date(value)

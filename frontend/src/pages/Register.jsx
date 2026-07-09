@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, Eye, EyeOff, Github, Loader, User, Lock, Check } from 'lucide-react'
 import { Button } from '../components/ui'
+import { Logo } from '../components/Logo'
 import { useAuth } from '../auth/AuthProvider'
 import { validateRegistration } from '../auth/validation'
 import { getGithubLoginUrl } from '../api/auth'
@@ -98,9 +99,12 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
       <div className="w-full max-w-md space-y-8">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-extrabold text-ink">Create your account</h1>
-          <p className="text-sm text-muted">Join Momentum and start protecting your progress</p>
+        <div className="flex flex-col items-center gap-5 text-center">
+          <Logo size={48} />
+          <div className="space-y-2">
+            <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">Create your account</h1>
+            <p className="text-sm text-muted">Join Momentum and start protecting your progress</p>
+          </div>
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">

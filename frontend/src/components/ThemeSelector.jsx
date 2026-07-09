@@ -14,6 +14,7 @@ export default function ThemeSelector() {
     <div className="inline-flex rounded-md bg-surface-subtle p-1" aria-label="Appearance">
       {options.map(({ value, label, icon: Icon }) => (
         <button
+          type="button"
           key={value}
           className={`focus-ring inline-flex h-8 items-center gap-1.5 rounded px-2.5 text-xs font-semibold transition-colors ${preference === value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
           aria-pressed={preference === value}

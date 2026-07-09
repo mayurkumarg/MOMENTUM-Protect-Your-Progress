@@ -25,7 +25,7 @@ export function StatTile({ label, value, delta, deltaLabel }) {
   )
 }
 
-function HeroStat({ icon: Icon, tone, value, label, sublabel }) {
+export function HeroStat({ icon: Icon, tone, value, label, sublabel }) {
   const toneClasses = {
     coral: 'bg-coral-soft text-coral',
     accent: 'bg-accent-soft text-accent',
@@ -190,41 +190,111 @@ export function PlatformBreakdownBars({ platformBreakdown }) {
   )
 }
 
-export function TaskCompletionPanel({ taskCompletion }) {
+// Circular "at a glance" read on a percentage — used for task completion,
+// generic enough to reuse anywhere a single ratio needs a headline visual.
+export function ProgressRing({ value, size = 96, strokeWidth = 9, label, sublabel }) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.min(100, Math.max(0, value || 0))
+  const offset = circumference * (1 - clamped / 100)
+
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 shrink-0">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={strokeWidth} className="stroke-surface-subtle" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="stroke-accent transition-[stroke-dashoffset] duration-700 ease-out"
+        />
+      </svg>
+      <div className="min-w-0">
+        <p className="font-display text-2xl font-extrabold text-ink">{clamped}%</p>
+        {label && <p className="text-xs font-semibold text-copy">{label}</p>}
+        {sublabel && <p className="mt-0.5 text-xs text-faint">{sublabel}</p>}
+      </div>
+    </div>
+  )
+}
+
+export function TaskCompletionRing({ taskCompletion }) {
   if (!taskCompletion) return null
+  const { completed, pending, overdue, total, completionRate } = taskCompletion
 
-  const { completed, pending, overdue, total } = taskCompletion
-  const pct = (value) => (total === 0 ? 0 : Math.max(value > 0 ? 3 : 0, (value / total) * 100))
+  if (total === 0) {
+    return (
+      <Card className="flex min-h-40 items-center justify-center p-5 text-center">
+        <p className="text-sm text-muted">No tasks yet — add one to see your completion rate here.</p>
+      </Card>
+    )
+  }
 
-  const rows = [
-    { key: 'completed', label: 'Completed', value: completed, icon: CheckCircle2, dot: 'bg-accent', text: 'text-accent' },
-    { key: 'pending', label: 'Pending', value: pending, icon: CircleDashed, dot: 'bg-faint', text: 'text-muted' },
-    { key: 'overdue', label: 'Overdue', value: overdue, icon: TriangleAlert, dot: 'bg-coral', text: 'text-coral' },
+  const stats = [
+    { key: 'completed', label: 'Done', value: completed, icon: CheckCircle2, text: 'text-accent' },
+    { key: 'pending', label: 'Pending', value: pending, icon: CircleDashed, text: 'text-muted' },
+    { key: 'overdue', label: 'Overdue', value: overdue, icon: TriangleAlert, text: 'text-coral' },
   ]
 
   return (
     <Card className="p-5">
-      {total === 0 ? (
-        <p className="text-sm text-muted">No tasks yet — add one to see your completion breakdown here.</p>
-      ) : (
-        <>
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-subtle">
-            <div className="h-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${pct(completed)}%` }} />
-            <div className="h-full bg-faint/40 transition-[width] duration-500 ease-out" style={{ width: `${pct(pending)}%` }} />
-            <div className="h-full bg-coral transition-[width] duration-500 ease-out" style={{ width: `${pct(overdue)}%` }} />
+      <div className="flex items-center justify-center py-1">
+        <ProgressRing value={completionRate} label="Completed" sublabel={`${completed} of ${total} tasks`} />
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-2 border-t border-line pt-4">
+        {stats.map(({ key, label, value, icon: Icon, text }) => (
+          <div key={key} className="flex flex-col items-center gap-1 text-center">
+            <Icon size={14} className={text} />
+            <p className="font-display text-base font-bold text-ink">{value}</p>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-faint">{label}</p>
           </div>
-          <div className="mt-4 space-y-2.5">
-            {rows.map(({ key, label, value, icon: Icon, dot, text }) => (
-              <div key={key} className="flex items-center gap-2.5 text-sm">
-                <span className={`size-2 shrink-0 rounded-full ${dot}`} />
-                <Icon size={14} className={text} />
-                <span className="flex-1 text-copy">{label}</span>
-                <span className="font-semibold text-ink">{value}</span>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+// Aggregates the trailing 98-day heatmap window into weekly totals and shows
+// the last 8 as bars — enough to see whether effort is trending up or down
+// without a second full heatmap.
+export function ProductivityTrend({ heatmap }) {
+  if (!heatmap || heatmap.length === 0) return null
+
+  const weeks = []
+  for (let i = 0; i < heatmap.length; i += 7) {
+    const chunk = heatmap.slice(i, i + 7)
+    const total = chunk.reduce((sum, day) => sum + day.count, 0)
+    weeks.push({ weekStart: chunk[0].date, total })
+  }
+
+  const recentWeeks = weeks.slice(-8)
+  const maxTotal = Math.max(1, ...recentWeeks.map((week) => week.total))
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex h-28 items-end gap-2.5">
+        {recentWeeks.map((week, index) => {
+          const isLast = index === recentWeeks.length - 1
+          const heightPct = week.total === 0 ? 3 : Math.max(6, Math.round((week.total / maxTotal) * 100))
+          return (
+            <div key={week.weekStart} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
+              <div className="flex w-full flex-1 items-end">
+                <div
+                  title={`Week of ${week.weekStart}: ${week.total} ${week.total === 1 ? 'activity' : 'activities'}`}
+                  className={`w-full rounded-t-md transition-all duration-500 ease-out ${isLast ? 'bg-accent' : 'bg-accent/30 hover:bg-accent/50'}`}
+                  style={{ height: `${heightPct}%` }}
+                />
               </div>
-            ))}
-          </div>
-        </>
-      )}
+              <span className="text-[10px] font-medium text-faint">{isLast ? 'Now' : ''}</span>
+            </div>
+          )
+        })}
+      </div>
     </Card>
   )
 }
@@ -257,19 +327,42 @@ export function RecentActivityList({ recent }) {
   )
 }
 
-// Static placeholder — no GitHub activity data exists on the backend yet. Kept in the
-// same grid slot the real card will occupy later so wiring it up won't need a re-layout.
-export function GitHubComingSoonCard() {
+// Small teaser pointing at the full /github dashboard. Connects inline (no
+// detour through Settings) when not yet connected — `onConnect` is expected
+// to be wired to useGithubConnect by the page rendering this, `onView` to a
+// simple navigate('/github'). Kept presentational otherwise, matching the
+// rest of this file.
+// Folds real sync numbers in when available (stats), so this reads as part
+// of the same productivity picture instead of a bare "connected" badge — the
+// full breakdown still lives on /github, this is the at-a-glance summary.
+export function GithubActivityTeaser({ connected, repositoryName, connecting, stats, onConnect, onView }) {
   return (
-    <Card className="flex h-full flex-col items-start gap-3 border-dashed p-5">
-      <div className="grid size-9 place-items-center rounded-md bg-surface-subtle text-muted"><Github size={17} /></div>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="font-display text-[15px] font-bold text-ink">GitHub activity</p>
-          <Badge tone="neutral">Coming soon</Badge>
-        </div>
-        <p className="mt-1.5 text-sm leading-5 text-muted">Commits and meaningful repository activity will show up here once connected.</p>
+    <Card className="flex h-full flex-col items-start gap-3 p-5">
+      <div className="flex w-full items-start justify-between gap-2">
+        <div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Github size={17} /></div>
+        <Badge tone={connected ? 'green' : 'neutral'}>{connected ? 'Connected' : 'Not connected'}</Badge>
       </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[15px] font-bold text-ink">GitHub activity</p>
+        <p className="mt-1.5 text-sm leading-5 text-muted">
+          {connected ? `Syncing solved problems to ${repositoryName}.` : 'Connect GitHub to build an automatic coding journal from solved problems.'}
+        </p>
+      </div>
+      {connected && stats && (
+        <div className="grid w-full grid-cols-2 gap-3 border-t border-line pt-3">
+          <div>
+            <p className="font-display text-lg font-bold text-ink">{stats.synced}</p>
+            <p className="text-[11px] text-faint">Synced to date</p>
+          </div>
+          <div>
+            <p className="font-display text-lg font-bold text-ink">{stats.currentStreak}d</p>
+            <p className="text-[11px] text-faint">Sync streak</p>
+          </div>
+        </div>
+      )}
+      <button onClick={connected ? onView : onConnect} disabled={connecting} className="focus-ring text-xs font-semibold text-accent hover:underline disabled:opacity-60">
+        {connected ? 'View GitHub activity' : connecting ? 'Redirecting to GitHub...' : 'Connect GitHub'} →
+      </button>
     </Card>
   )
 }
