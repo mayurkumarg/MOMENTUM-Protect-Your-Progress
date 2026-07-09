@@ -114,7 +114,6 @@ console.log('[Momentum] Content script loaded');
       const seconds = adapter.extractTimerSeconds();
       if (Number.isFinite(seconds) && seconds > 0) {
         capturedTimerSeconds = seconds;
-        log('[Momentum][duration] captured platform timer:', { platform: adapter.name, seconds });
       }
     } catch (error) {
       warn('[Momentum][duration] captureTimer failed:', error);
@@ -564,11 +563,6 @@ console.log('[Momentum] Content script loaded');
       platform: data.platform,
       problemTitle: data.problemTitle,
       problemKey,
-    });
-    log('[Momentum][duration] payload duration:', {
-      durationSeconds: data.durationSeconds,
-      durationMinutes: data.durationMinutes,
-      isEstimatedDuration: data.isEstimatedDuration,
     });
 
     try {

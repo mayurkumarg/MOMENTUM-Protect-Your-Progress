@@ -1,11 +1,11 @@
-import { Bell, Github, Palette, Plug, UserRound } from 'lucide-react'
+import { Bell, Palette, Plug, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../components/ConfirmDialog'
+import GithubIntegrationPanel from '../components/GithubIntegrationPanel'
 import { useToast } from '../components/ToastProvider'
 import { Badge, Button, Card, Input, PageHeader, Section } from '../components/ui'
 import ThemeSelector from '../components/ThemeSelector'
-import { getGithubLoginUrl } from '../api/auth'
 import { useAuth } from '../auth/AuthProvider'
 import { useLogout } from '../auth/hooks'
 import { useExtension } from '../hooks/useExtension'
@@ -33,20 +33,12 @@ export default function Settings() {
     else localStorage.removeItem(FOCUS_STORAGE_KEY)
   }
 
-  const handleConfigureReminders = () => {
-    toast.info('Reminders configuration is coming soon.')
-  }
-
   const handleInstallExtension = () => {
     if (!extension.isInstalled) {
       navigate('/install')
     } else if (!extension.isConnected) {
       toast.info('Extension installed but not connected yet — it connects automatically after you log in via the extension popup.')
     }
-  }
-
-  const handleGithubConnect = () => {
-    window.location.href = getGithubLoginUrl()
   }
 
   const handleSignOut = async () => {
@@ -64,8 +56,16 @@ export default function Settings() {
         <div className="space-y-7">
           <Section title="Profile">
             <Card className="p-5">
-              <div className="grid gap-5 sm:grid-cols-2">
-                <Input label="Session" value={auth.isAuthenticated ? 'Authenticated' : 'Signed out'} readOnly />
+              <div className="flex items-center gap-3.5 border-b border-line pb-5">
+                <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent-soft text-base font-bold text-accent">
+                  {(auth.user?.username || '?').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-display text-[15px] font-bold text-ink">{auth.user?.username || 'Your account'}</p>
+                  <p className="truncate text-sm text-muted">{auth.user?.email || 'No email on file'}</p>
+                </div>
+              </div>
+              <div className="mt-5">
                 <Input label="Current focus" placeholder="e.g. Interview preparation" hint="Used to keep guidance relevant." value={focus} onChange={handleFocusChange} />
               </div>
               <Button className="mt-5" variant="secondary" onClick={() => setShowSignOutConfirm(true)}>Sign out</Button>
@@ -73,15 +73,12 @@ export default function Settings() {
           </Section>
           <Section title="Preferences">
             <Card>
-              <SettingRow icon={Bell} title="Reminders" description="Gentle prompts for planned work and reviews."><Button variant="secondary" onClick={handleConfigureReminders}>Configure</Button></SettingRow>
+              <SettingRow icon={Bell} title="Reminders" description="Set per task — add or edit one from the Tasks page."><Button variant="secondary" onClick={() => navigate('/tasks')}>Go to Tasks</Button></SettingRow>
               <SettingRow icon={Palette} title="Appearance" description="Choose a comfortable workspace theme or follow your system."><ThemeSelector /></SettingRow>
             </Card>
           </Section>
           <Section title="Connections">
             <Card>
-              <SettingRow icon={Github} title="GitHub" description="Capture meaningful repository activity.">
-                {auth.user?.githubId ? <Badge tone="green">Connected</Badge> : <Button variant="secondary" onClick={handleGithubConnect}>Connect</Button>}
-              </SettingRow>
               <SettingRow icon={Plug} title="Browser extension" description="Capture DSA practice from supported platforms.">
                 {extension.isConnected ? (
                   <Badge tone="green">Connected</Badge>
@@ -92,6 +89,9 @@ export default function Settings() {
                 )}
               </SettingRow>
             </Card>
+          </Section>
+          <Section title="GitHub" description="Connect a repository so Momentum can track your DSA journal on GitHub.">
+            <GithubIntegrationPanel />
           </Section>
         </div>
         <Card className="h-fit p-5">

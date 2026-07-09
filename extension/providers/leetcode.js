@@ -50,7 +50,6 @@
       if (clockEl) {
         const raw = normalizeText(clockEl.textContent);
         const seconds = parseDurationTextToSeconds(raw);
-        console.log('[Momentum][duration] LeetCode timer candidate (clock):', JSON.stringify(raw), '=>', seconds);
         if (Number.isFinite(seconds) && seconds > 0) return seconds;
       }
 
@@ -58,13 +57,12 @@
       const match = labeled.match(/(?:your\s*time|time\s*taken)\s*:?\s*((?:\d+\s*h\s*)?(?:\d+\s*m\s*)?(?:\d+\s*s)?)/i);
       if (match && match[1] && match[1].trim()) {
         const seconds = parseDurationTextToSeconds(match[1]);
-        console.log('[Momentum][duration] LeetCode timer candidate (labeled):', JSON.stringify(match[1]), '=>', seconds);
         if (Number.isFinite(seconds) && seconds > 0) return seconds;
       }
 
       return null;
     } catch (error) {
-      console.warn('[Momentum][duration] LeetCode timer extraction failed:', error);
+      console.warn('[Momentum] LeetCode timer extraction failed:', error);
       return null;
     }
   }
