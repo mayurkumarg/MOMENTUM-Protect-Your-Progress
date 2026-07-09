@@ -13,6 +13,10 @@ router.post('/logout', authMiddleware, authController.logout);
 router.get('/github', authController.getGithubOAuthUrl);
 router.get('/github/callback', authController.githubCallback);
 
+// Repo-scope grant for an already-logged-in user (Settings → GitHub repository).
+// Reuses the same OAuth app + callback above — see getGithubConnectUrl for why.
+router.get('/github/connect-url', authMiddleware, authController.getGithubConnectUrl);
+
 // Token Management
 router.post('/refresh', authController.refresh);
 

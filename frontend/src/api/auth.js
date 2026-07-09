@@ -9,6 +9,14 @@ export function getGithubLoginUrl() {
   return `${baseUrl}/auth/github?${params.toString()}`
 }
 
+// For an already-logged-in user granting repo access from wherever they are
+// in the app — reuses the same GitHub OAuth app/callback as the login flow
+// above (just requests the extra `repo` scope). `returnTo` brings them back
+// to the page they started from instead of always landing on Settings.
+export function getGithubConnectUrl(returnTo) {
+  return apiRequest('/auth/github/connect-url', { params: { returnTo } })
+}
+
 export function registerUser(email, username, password, confirmPassword) {
   return apiRequest('/auth/register', {
     method: 'POST',

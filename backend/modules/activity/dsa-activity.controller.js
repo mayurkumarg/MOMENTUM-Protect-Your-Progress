@@ -1,5 +1,6 @@
 const activityService = require('./activity.service');
 const Activity = require('./activity.model');
+const githubSyncService = require('../github/sync/sync.service');
 const { ACTIVITY_SOURCE, ACTIVITY_TYPE } = Activity;
 
 /**
@@ -51,14 +52,6 @@ const createDsaActivity = async (req, res, next) => {
       language,
       difficulty,
     } = req.body;
-
-    // [Momentum][duration] temporary debug — remove after verifying the chain.
-    console.log('[Momentum][duration] received:', {
-      problemTitle,
-      durationSeconds,
-      durationMinutes,
-      isEstimatedDuration,
-    });
 
     // ── Validate required fields ──────────────────────────────────────
     const missing = [];
@@ -138,13 +131,12 @@ const createDsaActivity = async (req, res, next) => {
       activityData
     );
 
-    // [Momentum][duration] temporary debug — remove after verifying the chain.
-    console.log('[Momentum][duration] stored:', {
-      title: activity.title,
-      durationSeconds: activity.durationSeconds,
-      durationMinutes: activity.durationMinutes,
-      isEstimatedDuration: activity.isEstimatedDuration,
-    });
+    // Fire-and-forget: keeps the extension's response identical whether or
+    // not GitHub is connected. Sync errors are caught and recorded on the
+    // activity itself (see modules/github/sync), never surfaced here.
+    if (activity && activity.id) {
+      githubSyncService.enqueueSync(req.user.userId, activity.id);
+    }
 
     res.status(201).json({
       success: true,

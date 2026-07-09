@@ -107,31 +107,35 @@ const getGithubOAuthUrl = (req, res, next) => {
 
 // GitHub OAuth callback
 const githubCallback = async (req, res, next) => {
+  const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+
   try {
     const { code, state } = req.query;
 
     if (!code) {
       console.error(`[AUTH] No authorization code provided`);
-      const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
       const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent('Authorization code not provided')}`;
       return res.redirect(errorUrl);
     }
 
-    const result = await authService.githubLogin(code);
     const parsedState = authService.parseOAuthState(state);
-    const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
+    const result = await authService.githubLogin(code, parsedState.linkUserId);
 
     if (parsedState.source === 'web') {
-      const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
       const callbackPath = parsedState.returnTo || '/overview';
+      const joinParam = callbackPath.includes('?') ? '&' : '?';
 
-      let redirectUrl;
-      if (callbackPath.includes('?')) {
-        redirectUrl = `${clientUrl}${callbackPath}&${tokenParams}`;
-      } else {
-        redirectUrl = `${clientUrl}${callbackPath}?${tokenParams}`;
+      // Linking repo access to an already-logged-in account — the user
+      // already has a valid Momentum session, so don't touch it or issue
+      // new tokens, just bounce back with a success flag.
+      if (result.linked) {
+        const redirectUrl = `${clientUrl}${callbackPath}${joinParam}github=connected`;
+        console.log(`[AUTH] GitHub repo access linked, redirecting: ${redirectUrl}`);
+        return res.redirect(redirectUrl);
       }
 
+      const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
+      const redirectUrl = `${clientUrl}${callbackPath}${joinParam}${tokenParams}`;
       console.log(`[AUTH] Redirecting to web: ${redirectUrl}`);
       return res.redirect(redirectUrl);
     }
@@ -139,24 +143,78 @@ const githubCallback = async (req, res, next) => {
     const extensionId = process.env.EXTENSION_ID;
     if (!extensionId) {
       console.error(`[AUTH] Extension ID not configured`);
-      const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
       const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent('Extension OAuth is not configured')}`;
       return res.redirect(errorUrl);
     }
 
+    const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
     const extensionRedirect = `https://${extensionId}.chromiumapp.org/?${tokenParams}`;
     console.log(`[AUTH] Redirecting to extension: ${extensionRedirect}`);
     return res.redirect(extensionRedirect);
   } catch (error) {
     console.error(`[AUTH] Callback error: ${error.message}`);
-    
-    // Redirect to login with error instead of sending JSON
-    const clientUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+
+    // A linking attempt (already logged in) should bounce back to Settings
+    // with an inline error instead of booting the user to the login page.
+    let parsedState = { source: 'extension', returnTo: '', linkUserId: null };
+    try {
+      parsedState = authService.parseOAuthState(req.query.state);
+    } catch {
+      // fall through to the default login-error redirect below
+    }
+
     const errorMessage = error.message || 'GitHub login failed';
+
+    if (parsedState.linkUserId) {
+      const errorUrl = `${clientUrl}/settings?github=error&message=${encodeURIComponent(errorMessage)}`;
+      console.log(`[AUTH] Redirecting to settings with error: ${errorUrl}`);
+      return res.redirect(errorUrl);
+    }
+
     const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent(errorMessage)}`;
-    
     console.log(`[AUTH] Redirecting to login with error: ${errorUrl}`);
     return res.redirect(errorUrl);
+  }
+};
+
+// Only a relative in-app path — never let a caller-supplied returnTo redirect
+// off Momentum after GitHub auth completes.
+const SAFE_RETURN_TO = /^\/[a-zA-Z0-9\-_/]*$/;
+
+// Returns a GitHub authorize URL requesting repo scope, for an ALREADY
+// logged-in user connecting repo sync from wherever they are in the app (not
+// just Settings). Reuses the exact same OAuth app + callback URL as the login
+// flow above — the signed linkToken in `state` is what tells the shared
+// callback this is a link, not a login, and `returnTo` is what sends the user
+// back to the page they started from instead of always landing on Settings.
+const getGithubConnectUrl = (req, res, next) => {
+  try {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const redirectUri = process.env.GITHUB_REDIRECT_URI;
+
+    if (!clientId || !redirectUri) {
+      return res.status(500).json({ success: false, message: 'GitHub OAuth is not configured.' });
+    }
+
+    const requestedReturnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : '';
+    const returnTo = SAFE_RETURN_TO.test(requestedReturnTo) ? requestedReturnTo : '/settings';
+
+    const linkToken = authService.signGithubLinkToken(req.user.userId);
+    const state = JSON.stringify({ source: 'web', returnTo, linkToken });
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: 'repo',
+      state,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: { url: `https://github.com/login/oauth/authorize?${params.toString()}` },
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
@@ -195,6 +253,7 @@ module.exports = {
   login,
   logout,
   getGithubOAuthUrl,
+  getGithubConnectUrl,
   githubCallback,
   me,
   refresh,

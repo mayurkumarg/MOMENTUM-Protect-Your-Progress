@@ -86,6 +86,22 @@ const activitySchema = new Schema(
       type: Schema.Types.Mixed,
       default: {},
     },
+    // Populated only for DSA activities that go through the GitHub journal
+    // sync (backend/modules/github/sync). Absent on every other activity.
+    githubSync: {
+      status: {
+        type: String,
+        enum: ['pending', 'synced', 'failed', 'skipped'],
+      },
+      attempts: {
+        type: Number,
+        default: 0,
+      },
+      lastAttemptAt: Date,
+      commitSha: String,
+      filePath: String,
+      error: String,
+    },
   },
   {
     timestamps: true,
