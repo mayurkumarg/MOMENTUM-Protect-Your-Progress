@@ -1,5 +1,45 @@
 import { formatDate, formatMinutes } from './format'
 
+export const STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'IN_PROGRESS', label: 'In Progress' },
+  { value: 'COMPLETED', label: 'Completed' },
+]
+
+export const PRIORITY_OPTIONS = [
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+]
+
+export const PRIORITY_TONE = { LOW: 'neutral', MEDIUM: 'yellow', HIGH: 'coral' }
+const PRIORITY_WEIGHT = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+
+export const SORT_OPTIONS = [
+  { value: 'deadline', label: 'Deadline' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'created', label: 'Recently added' },
+  { value: 'title', label: 'Title A-Z' },
+]
+
+export const GROUP_OPTIONS = [
+  { value: 'none', label: 'Time' },
+  { value: 'category', label: 'Category' },
+  { value: 'priority', label: 'Priority' },
+]
+
+// `minutes` is the number of minutes before the deadline; 'custom' means the
+// task carries its own absolute remindAt instead of an offset.
+export const REMINDER_OPTIONS = [
+  { value: '0', label: 'At due time', minutes: 0 },
+  { value: '5', label: '5 minutes before', minutes: 5 },
+  { value: '15', label: '15 minutes before', minutes: 15 },
+  { value: '30', label: '30 minutes before', minutes: 30 },
+  { value: '60', label: '1 hour before', minutes: 60 },
+  { value: '1440', label: '1 day before', minutes: 1440 },
+  { value: 'custom', label: 'Custom time...', minutes: null },
+]
+
 export function mapTaskToWorkItem(task) {
   const completed = task.status === 'COMPLETED'
 
@@ -10,6 +50,56 @@ export function mapTaskToWorkItem(task) {
     label: completed ? 'Done' : formatMinutes(Math.round((task.estimatedHours || 0) * 60)),
     tone: completed ? 'green' : task.category ? 'coral' : 'yellow',
   }
+}
+
+export function sortTasks(tasks, sortBy = 'deadline') {
+  const sorted = [...tasks]
+
+  if (sortBy === 'priority') {
+    return sorted.sort((a, b) => (PRIORITY_WEIGHT[a.priority] ?? 1) - (PRIORITY_WEIGHT[b.priority] ?? 1))
+  }
+  if (sortBy === 'created') {
+    return sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+  }
+  if (sortBy === 'title') {
+    return sorted.sort((a, b) => a.title.localeCompare(b.title))
+  }
+
+  // Default: deadline, soonest first — tasks without one sink to the end.
+  return sorted.sort((a, b) => {
+    if (!a.deadline && !b.deadline) return 0
+    if (!a.deadline) return 1
+    if (!b.deadline) return -1
+    return new Date(a.deadline) - new Date(b.deadline)
+  })
+}
+
+// Alternative to the time-based splitTasks grouping below — buckets by
+// category or priority instead, for when "what's overdue" matters less than
+// "what area of my life is this." Returns null for 'none' so callers fall
+// back to the default time-based view.
+export function groupTasksBy(tasks, groupBy) {
+  if (groupBy === 'category') {
+    const groups = new Map()
+    for (const task of tasks) {
+      const key = task.category || 'Uncategorized'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(task)
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => (a === 'Uncategorized' ? 1 : b === 'Uncategorized' ? -1 : a.localeCompare(b)))
+      .map(([label, groupTasks]) => ({ key: label, label, tasks: groupTasks }))
+  }
+
+  if (groupBy === 'priority') {
+    return PRIORITY_OPTIONS.map((option) => ({
+      key: option.value,
+      label: option.label,
+      tasks: tasks.filter((task) => (task.priority || 'MEDIUM') === option.value),
+    })).filter((group) => group.tasks.length > 0)
+  }
+
+  return null
 }
 
 export function splitTasks(tasks) {
@@ -26,4 +116,74 @@ export function splitTasks(tasks) {
     overdue: pending.filter((task) => task.deadline && new Date(task.deadline) < now),
     completed,
   }
+}
+
+export const DEFAULT_TASK_FILTERS = { timeframe: 'all', statuses: [], priorities: [], category: '', tags: [] }
+
+export function hasActiveTaskFilters(filters) {
+  return (
+    filters.timeframe !== 'all' ||
+    filters.statuses.length > 0 ||
+    filters.priorities.length > 0 ||
+    Boolean(filters.category) ||
+    (filters.tags || []).length > 0
+  )
+}
+
+const isSameCalendarDay = (a, b) => a.toDateString() === b.toDateString()
+
+export function applyTaskFilters(tasks, filters) {
+  const { timeframe, statuses, priorities, category, tags } = filters
+  const now = new Date()
+  const weekEnd = new Date(now)
+  weekEnd.setDate(weekEnd.getDate() + 7)
+  weekEnd.setHours(23, 59, 59, 999)
+
+  return tasks.filter((task) => {
+    if (statuses.length && !statuses.includes(task.status)) return false
+    if (priorities.length && !priorities.includes(task.priority || 'MEDIUM')) return false
+    if (category && (task.category || '') !== category) return false
+    if (tags && tags.length && !tags.every((tag) => (task.tags || []).includes(tag))) return false
+
+    if (!task.deadline) return timeframe === 'all'
+    const deadline = new Date(task.deadline)
+
+    if (timeframe === 'today') return isSameCalendarDay(deadline, now)
+    if (timeframe === 'week') return deadline <= weekEnd
+    if (timeframe === 'overdue') return deadline < now && task.status !== 'COMPLETED'
+
+    return true
+  })
+}
+
+// Human label for a task's current reminder setting, e.g. "1 hour before" or
+// "Custom time" — used wherever a task's reminder needs a one-line summary.
+export function describeReminder(reminder) {
+  if (!reminder?.enabled) return null
+  if (reminder.isCustom) return 'Custom time'
+  const match = REMINDER_OPTIONS.find((option) => option.minutes === reminder.offsetMinutes)
+  return match ? match.label : `${reminder.offsetMinutes} minutes before`
+}
+
+// Turns the reminder form fields (a select value + optional custom
+// datetime-local string) into the `reminder` object the API expects.
+export function buildReminderPayload(reminderOffset, customReminderAt) {
+  if (!reminderOffset) {
+    return { enabled: false, offsetMinutes: 0, isCustom: false, remindAt: null }
+  }
+
+  if (reminderOffset === 'custom') {
+    if (!customReminderAt) return { enabled: false, offsetMinutes: 0, isCustom: false, remindAt: null }
+    return { enabled: true, offsetMinutes: 0, isCustom: true, remindAt: new Date(customReminderAt).toISOString() }
+  }
+
+  return { enabled: true, offsetMinutes: Number(reminderOffset), isCustom: false, remindAt: null }
+}
+
+// Inverse of buildReminderPayload — derives the form's select value from a
+// task's stored reminder, for pre-filling the edit form.
+export function reminderToFormValue(reminder) {
+  if (!reminder?.enabled) return ''
+  if (reminder.isCustom) return 'custom'
+  return String(reminder.offsetMinutes ?? 0)
 }

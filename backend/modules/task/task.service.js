@@ -18,11 +18,13 @@ const assertAllowedUpdates = (updates) => {
     'deadline',
     'estimatedHours',
     'status',
+    'priority',
     'category',
     'tags',
     'subtasks',
     'addSubtasks',
     'subtaskUpdates',
+    'reminder',
   ];
   const invalidFields = Object.keys(updates).filter((field) => !allowedFields.includes(field));
 
@@ -38,12 +40,14 @@ const serializeTask = (task) => {
     id: taskObject._id,
     title: taskObject.title,
     status: taskObject.status,
+    priority: taskObject.priority,
     category: taskObject.category,
     tags: taskObject.tags,
     progress: taskObject.progress,
     estimatedHours: taskObject.estimatedHours,
     deadline: taskObject.deadline,
     completedAt: taskObject.completedAt,
+    reminder: taskObject.reminder,
     subtasks: taskObject.subtasks,
     createdAt: taskObject.createdAt,
     updatedAt: taskObject.updatedAt,
@@ -148,9 +152,11 @@ const createTask = async (userId, data) => {
     estimatedHours: data.estimatedHours,
     deadline: data.deadline,
     status: data.status,
+    priority: data.priority,
     category: data.category,
     tags: data.tags,
     subtasks: data.subtasks,
+    reminder: data.reminder,
   });
 
   return serializeTask(task);
@@ -191,6 +197,23 @@ const getTaskById = async (userId, taskId) => {
   return serializeTask(task);
 };
 
+// True if the reminder's actual firing schedule moved (offset/custom-time/
+// enabled toggled, or the deadline shifted) — as opposed to only `notifiedAt`
+// changing, which is how the reminder watcher marks a reminder as fired.
+// Needed because Mongoose can't tell these apart via isModified() once a
+// whole reminder object has been assigned (see task.model.js).
+const reminderScheduleChanged = (previous, next, deadlineChanged) => {
+  if (deadlineChanged) return true;
+  if (!previous || !next) return Boolean(next);
+  if (previous.enabled !== next.enabled) return true;
+  if (previous.isCustom !== next.isCustom) return true;
+  if (!next.isCustom) return previous.offsetMinutes !== next.offsetMinutes;
+
+  const previousTime = previous.remindAt ? new Date(previous.remindAt).getTime() : null;
+  const nextTime = next.remindAt ? new Date(next.remindAt).getTime() : null;
+  return previousTime !== nextTime;
+};
+
 const updateTask = async (userId, taskId, updates) => {
   assertValidObjectId(userId, 'userId');
   assertValidObjectId(taskId, 'taskId');
@@ -202,11 +225,36 @@ const updateTask = async (userId, taskId, updates) => {
     throw new AppError('Task not found or unauthorized.', 404);
   }
 
+  const previousReminder = task.reminder ? task.reminder.toObject() : null;
+  const previousDeadline = task.deadline;
+
   const directUpdates = { ...updates };
   delete directUpdates.addSubtasks;
   delete directUpdates.subtaskUpdates;
 
   Object.assign(task, directUpdates);
+
+  // Assigning a whole reminder object (as every caller does — the edit form
+  // resubmits it on every save, the reminder watcher marks one as fired the
+  // same way) replaces the subdocument outright: any field the new object
+  // omits — notifiedAt included — resets to its schema default rather than
+  // carrying over. So notifiedAt has to be explicitly reconciled here:
+  //  - schedule actually moved -> clear it, the reminder should fire again
+  //  - schedule unchanged, caller didn't mention notifiedAt (edit form
+  //    resubmitting an unrelated field) -> restore the previous value
+  //  - schedule unchanged, caller explicitly set notifiedAt (the reminder
+  //    watcher marking one as fired) -> respect it, already applied above
+  if (updates.reminder !== undefined && task.reminder) {
+    const deadlineChanged = Boolean(previousDeadline) && Boolean(task.deadline) && previousDeadline.getTime() !== task.deadline.getTime();
+    const changed = reminderScheduleChanged(previousReminder, task.reminder.toObject(), deadlineChanged);
+    const callerSetNotifiedAt = Object.prototype.hasOwnProperty.call(updates.reminder, 'notifiedAt');
+
+    if (changed) {
+      task.reminder.notifiedAt = null;
+    } else if (!callerSetNotifiedAt) {
+      task.reminder.notifiedAt = previousReminder?.notifiedAt || null;
+    }
+  }
 
   if (updates.addSubtasks) {
     if (!Array.isArray(updates.addSubtasks)) {
