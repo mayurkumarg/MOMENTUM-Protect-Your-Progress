@@ -25,7 +25,7 @@ export default function Analytics() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile label="Activity, last 14 weeks" value={summary.totals.totalActivities} />
+            <StatTile label="Activity, last 14 weeks" value={summary.totals.totalActivities} deltaLabel={summary.totals.avgMinutesPerActivity ? `~${summary.totals.avgMinutesPerActivity} min avg per problem` : undefined} />
             <StatTile label="Current streak" value={`${summary.streak.current}d`} deltaLabel={`Longest: ${summary.streak.longest}d`} />
             <StatTile
               label="This week vs last"

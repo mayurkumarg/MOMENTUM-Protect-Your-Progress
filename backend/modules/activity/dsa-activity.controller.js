@@ -23,9 +23,18 @@ const VALID_PLATFORMS = [
   'InterviewBit',
 ];
 
+const MIN_DURATION_MINUTES = 1;
+const MAX_DURATION_MINUTES = 1440;
+
+const resolveDurationMinutes = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return MIN_DURATION_MINUTES;
+  return Math.min(Math.max(Math.round(parsed), MIN_DURATION_MINUTES), MAX_DURATION_MINUTES);
+};
+
 const createDsaActivity = async (req, res, next) => {
   try {
-    const { platform, problemTitle, url, solvedAt } = req.body;
+    const { platform, problemTitle, url, solvedAt, durationMinutes } = req.body;
 
     // ── Validate required fields ──────────────────────────────────────
     const missing = [];
@@ -82,7 +91,7 @@ const createDsaActivity = async (req, res, next) => {
       source: ACTIVITY_SOURCE.DSA,
       activityType: ACTIVITY_TYPE.CODING,
       title: problemTitle,
-      durationMinutes: 1,
+      durationMinutes: resolveDurationMinutes(durationMinutes),
       activityDate: parsedDate,
       metadata: {
         platform,

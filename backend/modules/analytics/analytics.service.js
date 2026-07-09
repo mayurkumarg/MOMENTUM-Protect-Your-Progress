@@ -85,9 +85,12 @@ const computeAnalyticsSummary = async (userId) => {
   const taskCompletion = { completed, pending, overdue, total, completionRate };
 
   // ── Totals ──
+  const totalActivities = windowActivity.length;
+  const totalMinutes = windowActivity.reduce((sum, activity) => sum + (activity.durationMinutes || 0), 0);
   const totals = {
-    totalActivities: windowActivity.length,
-    totalMinutes: windowActivity.reduce((sum, activity) => sum + (activity.durationMinutes || 0), 0),
+    totalActivities,
+    totalMinutes,
+    avgMinutesPerActivity: totalActivities === 0 ? 0 : Math.round(totalMinutes / totalActivities),
     activeDays: activityDayKeys.size,
   };
 

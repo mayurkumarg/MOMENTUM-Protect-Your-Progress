@@ -29,6 +29,7 @@
       PENDING_ACTIVITIES: 'pendingActivities',
       RECENTLY_SENT: 'recentlySent',
       SYNC_STATUS: 'syncStatus',
+      PROBLEM_SESSIONS: 'problemSessions',
     },
 
     MESSAGE_ACTIONS: {
@@ -65,6 +66,9 @@
       SEND_COOLDOWN_MS: 15 * 1000,
       URL_POLL_MS: 1000,
       RETRY_DELAY_MS: 3000,
+      MIN_SOLVE_DURATION_MINUTES: 1,
+      MAX_SOLVE_DURATION_MINUTES: 180,
+      PROBLEM_SESSION_TTL_MS: 7 * 24 * 60 * 60 * 1000,
     },
 
     OBSERVER_OPTIONS: {

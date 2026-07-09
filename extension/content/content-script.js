@@ -61,6 +61,78 @@ console.log('[Momentum] Content script loaded');
     return `${adapter.name}:${window.location.origin}${window.location.pathname}`;
   }
 
+  // Records when a problem was first seen, in chrome.storage.local so it survives
+  // page reloads and service-worker restarts (in-memory timers can't). Only writes
+  // if the key isn't already present, so revisiting a problem across multiple
+  // sessions still measures from the true first visit.
+  async function ensureProblemSession(problemKey) {
+    if (!problemKey) return;
+    try {
+      const storageKey = config.STORAGE_KEYS.PROBLEM_SESSIONS;
+      const result = await chrome.storage.local.get([storageKey]);
+      const sessions = result[storageKey] || {};
+      const now = Date.now();
+      let changed = false;
+
+      for (const key of Object.keys(sessions)) {
+        if (now - sessions[key].firstSeenAt > TIMING.PROBLEM_SESSION_TTL_MS) {
+          delete sessions[key];
+          changed = true;
+        }
+      }
+
+      if (!sessions[problemKey]) {
+        sessions[problemKey] = { firstSeenAt: now };
+        changed = true;
+      }
+
+      if (changed) {
+        await chrome.storage.local.set({ [storageKey]: sessions });
+      }
+    } catch (error) {
+      warn('Failed to record problem session:', error);
+    }
+  }
+
+  function clampDuration(minutes) {
+    const min = TIMING.MIN_SOLVE_DURATION_MINUTES;
+    const max = TIMING.MAX_SOLVE_DURATION_MINUTES;
+    if (!Number.isFinite(minutes)) return min;
+    return Math.min(Math.max(minutes, min), max);
+  }
+
+  // Falls back to the in-memory pageLoadedAt (this-session clock) if no stored
+  // session is found, so a solve still gets a real elapsed time rather than a
+  // fabricated one.
+  async function computeDurationMinutes(problemKey) {
+    const fallbackMinutes = clampDuration(Math.round((Date.now() - pageLoadedAt) / 60000));
+    try {
+      const storageKey = config.STORAGE_KEYS.PROBLEM_SESSIONS;
+      const result = await chrome.storage.local.get([storageKey]);
+      const sessions = result[storageKey] || {};
+      const session = sessions[problemKey];
+      if (!session || !session.firstSeenAt) return fallbackMinutes;
+      return clampDuration(Math.round((Date.now() - session.firstSeenAt) / 60000));
+    } catch (error) {
+      warn('Failed to read problem session for duration:', error);
+      return fallbackMinutes;
+    }
+  }
+
+  async function clearProblemSession(problemKey) {
+    try {
+      const storageKey = config.STORAGE_KEYS.PROBLEM_SESSIONS;
+      const result = await chrome.storage.local.get([storageKey]);
+      const sessions = result[storageKey] || {};
+      if (sessions[problemKey]) {
+        delete sessions[problemKey];
+        await chrome.storage.local.set({ [storageKey]: sessions });
+      }
+    } catch (error) {
+      warn('Failed to clear problem session:', error);
+    }
+  }
+
   function resetForUrlChange(reason) {
     const adapter = getAdapter();
     const nextKey = getProblemKey(adapter);
@@ -76,6 +148,8 @@ console.log('[Momentum] Content script loaded');
     submission = null;
     sendInFlight = false;
     lastRelevantMutationAt = 0;
+
+    if (adapter) ensureProblemSession(nextKey);
 
     if (retryTimer) {
       clearTimeout(retryTimer);
@@ -420,19 +494,21 @@ console.log('[Momentum] Content script loaded');
     sendSolved(adapter, problemKey, finalDetection);
   }
 
-  function sendSolved(adapter, problemKey, detection) {
+  async function sendSolved(adapter, problemKey, detection) {
     if (sendInFlight) return;
 
     const data = adapter.extractProblemData();
     data.platform = data.platform || adapter.name;
     data.url = data.url || window.location.href;
     data.solvedAt = data.solvedAt || new Date().toISOString();
+    data.durationMinutes = await computeDurationMinutes(problemKey);
     data.detection = {
       reason: detection.reason || 'accepted indicators found',
       signals: detection.signals || [],
       problemKey,
     };
 
+    if (sendInFlight) return;
     sendInFlight = true;
     notifiedKeys.set(problemKey, Date.now());
 
@@ -464,10 +540,12 @@ console.log('[Momentum] Content script loaded');
           platform: data.platform,
           problemTitle: data.problemTitle,
           problemKey,
+          durationMinutes: data.durationMinutes,
         });
 
         sendInFlight = false;
         submission = null;
+        clearProblemSession(problemKey);
       });
     } catch (error) {
       warn('Solve event send threw:', error);
@@ -563,6 +641,9 @@ console.log('[Momentum] Content script loaded');
   attachSubmitDetection();
   patchHistory();
   startObserver();
+
+  const initialAdapter = getAdapter();
+  if (initialAdapter) ensureProblemSession(getProblemKey(initialAdapter));
 
   setTimeout(() => scheduleReconcile('startup check'), TIMING.STARTUP_QUIET_MS);
 
