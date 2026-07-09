@@ -80,6 +80,10 @@ export function EmptyState({ icon: Icon = Plus, title, description, action, comp
   )
 }
 
+export function Skeleton({ className = '' }) {
+  return <div className={`animate-pulse rounded-md bg-surface-subtle ${className}`} />
+}
+
 export function LoadingState({ label = 'Preparing your workspace' }) {
   return (
     <div className="flex min-h-48 flex-col items-center justify-center text-muted">

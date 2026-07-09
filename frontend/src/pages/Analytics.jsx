@@ -1,38 +1,90 @@
-import { ArrowRight, BarChart3 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { ActivityHeatmap, PlatformBreakdownBars, StatTile, TaskCompletionPanel } from '../components/AnalyticsCharts'
-import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section } from '../components/ui'
+import { useMemo } from 'react'
+import {
+  ActivityHeatmap,
+  DifficultyBreakdown,
+  GitHubComingSoonCard,
+  PlatformBreakdownBars,
+  RecentActivityList,
+  StatTile,
+  TaskCompletionPanel,
+  TodayHeroCard,
+} from '../components/AnalyticsCharts'
+import { useToast } from '../components/ToastProvider'
+import { Button, Card, EmptyState, ErrorState, PageHeader, Section, Skeleton } from '../components/ui'
 import { useAnalyticsSummary } from '../hooks/useAnalyticsSummary'
+import { useDsaSummary } from '../hooks/useDsaSummary'
+import { useTasks } from '../hooks/useTasks'
+import { formatDurationHuman } from '../utils/format'
+
+function AnalyticsSkeleton() {
+  return (
+    <div className="space-y-8">
+      <Skeleton className="h-44 w-full" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+      </div>
+      <Skeleton className="h-52 w-full" />
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
+      </div>
+    </div>
+  )
+}
 
 export default function Analytics() {
-  const navigate = useNavigate()
-  const { summary, isLoading, error, refetch } = useAnalyticsSummary()
+  const toast = useToast()
+  const analyticsQuery = useAnalyticsSummary()
+  const dsaQuery = useDsaSummary()
+  const tasksQuery = useTasks()
 
-  const isEmpty = summary && summary.totals.totalActivities === 0 && summary.taskCompletion.total === 0
+  const tasksCompletedToday = useMemo(() => {
+    const todayKey = new Date().toDateString()
+    return tasksQuery.tasks.filter(
+      (task) => task.status === 'COMPLETED' && task.completedAt && new Date(task.completedAt).toDateString() === todayKey
+    ).length
+  }, [tasksQuery.tasks])
+
+  const isLoading = analyticsQuery.isLoading || dsaQuery.isLoading
+  const error = analyticsQuery.error || dsaQuery.error
+  const summary = analyticsQuery.summary
+  const dsaSummary = dsaQuery.summary
+
+  const handleRetry = () => {
+    Promise.all([analyticsQuery.refetch(), dsaQuery.refetch()]).catch((retryError) => {
+      toast.error(retryError.message || 'Still unable to load. Please try again.')
+    })
+  }
 
   return (
     <div className="space-y-8">
-      <PageHeader eyebrow="Understand" title="Analytics" description="Useful patterns about workload, consistency, and effort. No vanity metrics." />
+      <PageHeader eyebrow="Understand" title="Analytics" description="A clear read on today's effort and the last 14 weeks. No vanity metrics." />
 
       {isLoading ? (
-        <Card><LoadingState label="Reading your activity" /></Card>
+        <AnalyticsSkeleton />
       ) : error ? (
-        <Card><ErrorState title="Analytics could not load" description={error.message} action={<Button variant="secondary" onClick={() => refetch().catch(() => {})}>Retry</Button>} /></Card>
-      ) : isEmpty ? (
-        <Section title="Insights">
-          <Card><EmptyState icon={BarChart3} title="No patterns to show yet" description="Add a few tasks and let the extension capture some activity — insights become useful once there's a work record to read." action={<Button variant="ghost" onClick={() => navigate('/activity')}>Learn about insights <ArrowRight size={15} /></Button>} /></Card>
-        </Section>
+        <Card><ErrorState title="Analytics could not load" description={error.message} action={<Button variant="secondary" onClick={handleRetry}>Retry</Button>} /></Card>
       ) : (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile label="Activity, last 14 weeks" value={summary.totals.totalActivities} deltaLabel={summary.totals.avgMinutesPerActivity ? `~${summary.totals.avgMinutesPerActivity} min avg per problem` : undefined} />
-            <StatTile label="Current streak" value={`${summary.streak.current}d`} deltaLabel={`Longest: ${summary.streak.longest}d`} />
+        <div className="animate-fade-up space-y-8">
+          <TodayHeroCard
+            problemsSolvedToday={dsaSummary?.problemsSolvedToday || 0}
+            tasksCompletedToday={tasksCompletedToday}
+            timeTodayLabel={formatDurationHuman((dsaSummary?.totalMinutesToday || 0) * 60) || '0m'}
+            streakCurrent={summary.streak.current}
+            streakLongest={summary.streak.longest}
+          />
+
+          <div className="grid gap-4 sm:grid-cols-3">
             <StatTile
               label="This week vs last"
               value={summary.weeklyComparison.thisWeek}
               delta={summary.weeklyComparison.deltaPct}
               deltaLabel={`${summary.weeklyComparison.lastWeek} last week`}
             />
+            <StatTile label="Activity, last 14 weeks" value={summary.totals.totalActivities} deltaLabel={summary.totals.avgMinutesPerActivity ? `~${summary.totals.avgMinutesPerActivity} min avg per problem` : undefined} />
             <StatTile label="Task completion" value={`${summary.taskCompletion.completionRate}%`} deltaLabel={`${summary.taskCompletion.completed} of ${summary.taskCompletion.total} tasks`} />
           </div>
 
@@ -40,19 +92,29 @@ export default function Analytics() {
             <ActivityHeatmap heatmap={summary.heatmap} />
           </Section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Section title="Platforms">
-              {summary.platformBreakdown.length ? (
-                <PlatformBreakdownBars platformBreakdown={summary.platformBreakdown} />
-              ) : (
-                <Card><EmptyState compact title="No platform activity yet" description="Solved problems from a connected platform will show up here." /></Card>
-              )}
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Section title="Today's difficulty mix">
+              <DifficultyBreakdown difficultyCounts={dsaSummary?.difficultyCounts} />
             </Section>
-            <Section title="Task completion">
+            <Section title="Platforms" description="Last 14 weeks.">
+              <div className="space-y-4">
+                {summary.platformBreakdown.length ? (
+                  <PlatformBreakdownBars platformBreakdown={summary.platformBreakdown} />
+                ) : (
+                  <Card><EmptyState compact title="No platform activity yet" description="Solved problems from a connected platform will show up here." /></Card>
+                )}
+                <GitHubComingSoonCard />
+              </div>
+            </Section>
+            <Section title="Task completion" description="All time.">
               <TaskCompletionPanel taskCompletion={summary.taskCompletion} />
             </Section>
           </div>
-        </>
+
+          <Section title="Recent activity" description="Today's solves, most recent first.">
+            <RecentActivityList recent={dsaSummary?.recent} />
+          </Section>
+        </div>
       )}
     </div>
   )
