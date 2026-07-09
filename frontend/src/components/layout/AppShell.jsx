@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, BarChart3, CalendarDays, CheckSquare2, CircleHelp, Command, LayoutGrid, Menu, MessageCircle, Plus, Settings, X } from 'lucide-react'
+import { Activity, BarChart3, CheckSquare2, CircleHelp, Github, LayoutGrid, Menu, MessageCircle, Plus, Settings, X } from 'lucide-react'
 import { Button, IconButton } from '../ui'
-import { useToast } from '../ToastProvider'
+import { Logo } from '../Logo'
 import ThemeToggle from '../ThemeToggle'
 import ProfileMenu from './ProfileMenu'
+import { useTaskReminders } from '../../hooks/useTaskReminders'
 
 const mainNav = [
   { to: '/overview', label: 'Overview', icon: LayoutGrid },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare2 },
   { to: '/activity', label: 'Activity', icon: Activity },
-  { to: '/timeline', label: 'Timeline', icon: CalendarDays },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/assistant', label: 'Assistant', icon: MessageCircle },
+  { to: '/github', label: 'GitHub', icon: Github },
 ]
 
 function Brand() {
   return (
     <NavLink to="/overview" className="focus-ring flex items-center gap-2 rounded-md">
-      <span className="grid size-8 place-items-center rounded-md bg-ink text-canvas"><Command size={17} /></span>
-      <span className="font-display text-[15px] font-extrabold text-ink">Momentum</span>
+      <Logo size={30} />
+      <span className="font-display text-[15px] font-extrabold tracking-tight text-ink">Momentum</span>
     </NavLink>
   )
 }
@@ -35,8 +36,6 @@ function NavItem({ item, onClick }) {
 }
 
 function Sidebar({ onNavigate }) {
-  const toast = useToast()
-
   return (
     <div className="flex h-full flex-col px-4 py-5">
       <div className="px-2"><Brand /></div>
@@ -47,7 +46,9 @@ function Sidebar({ onNavigate }) {
       <div className="mt-auto space-y-1 border-t border-line pt-4">
         <NavItem item={{ to: '/settings', label: 'Settings', icon: Settings }} onClick={onNavigate} />
         <div className="flex items-center gap-2">
-          <button onClick={() => toast.info('Help & Feedback is coming soon.')} className="focus-ring flex h-10 min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted hover:bg-surface-subtle hover:text-ink"><CircleHelp size={17} />Help & feedback</button>
+          <NavLink to="/help" onClick={onNavigate} className={({ isActive }) => `focus-ring flex h-10 min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors ${isActive ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-subtle hover:text-ink'}`}>
+            <CircleHelp size={17} />Help & feedback
+          </NavLink>
           <ThemeToggle className="size-9 shrink-0" />
         </div>
       </div>
@@ -62,7 +63,10 @@ export default function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  const pageName = [...mainNav, { to: '/settings', label: 'Settings' }].find((item) => item.to === location.pathname)?.label || 'Momentum'
+  const pageName = [...mainNav, { to: '/settings', label: 'Settings' }, { to: '/help', label: 'Help & Feedback' }].find((item) => item.to === location.pathname)?.label || 'Momentum'
+
+  // Mounted once here (not per-page) so reminders fire no matter where the user is in the app.
+  useTaskReminders()
 
   useEffect(() => {
     if (!menuOpen) return undefined

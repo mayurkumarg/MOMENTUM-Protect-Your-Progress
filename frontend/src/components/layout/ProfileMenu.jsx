@@ -66,17 +66,17 @@ export default function ProfileMenu() {
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-lg border border-line bg-canvas shadow-lg">
+        <div className="surface animate-fade-up absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-lg">
           <div className="border-b border-line px-4 py-3">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Account</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">Account</p>
           </div>
-          
+
           <button
             onClick={() => {
               navigate('/settings')
               setOpen(false)
             }}
-            className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-muted hover:bg-surface-subtle hover:text-ink transition-colors"
+            className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:bg-surface-subtle hover:text-ink"
           >
             <User size={16} />
             Profile Settings
@@ -84,7 +84,7 @@ export default function ProfileMenu() {
 
           <button
             onClick={() => setShowSignOutConfirm(true)}
-            className="flex w-full items-center gap-3 border-t border-line px-4 py-2.5 text-sm font-medium text-coral hover:bg-coral/5 transition-colors disabled:opacity-50"
+            className="flex w-full items-center gap-3 border-t border-line px-4 py-2.5 text-sm font-medium text-coral transition-colors hover:bg-coral-soft disabled:opacity-50"
           >
             <LogOut size={16} />
             Sign out

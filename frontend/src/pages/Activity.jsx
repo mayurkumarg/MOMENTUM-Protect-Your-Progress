@@ -1,4 +1,4 @@
-import { Chrome, Code2, Github, LoaderCircle, Plus, Trash2, Zap } from 'lucide-react'
+import { Chrome, CheckCircle2, Code2, Github, ListPlus, LoaderCircle, Plus, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -9,12 +9,81 @@ import { Badge, Button, Card, EmptyState, ErrorState, IconButton, Input, Loading
 import { useActivities } from '../hooks/useActivities'
 import { useDsaSummary } from '../hooks/useDsaSummary'
 import { useExtension } from '../hooks/useExtension'
-import { formatActivityDuration, formatDateTime, formatDurationHuman, toDateTimeInputValue } from '../utils/format'
+import { useGithubIntegration } from '../hooks/useGithubIntegration'
+import { useTimeline } from '../hooks/useTimeline'
+import { formatActivityDuration, formatDateTime, formatDayLabel, formatDurationHuman, formatMinutes, formatTime, toDateTimeInputValue } from '../utils/format'
 
 const DIFFICULTY_TONE = { Easy: 'green', Medium: 'yellow', Hard: 'coral' }
 
-const getSources = (extension) => [
-  { icon: Github, title: 'GitHub', detail: 'Commits and meaningful repository activity', status: 'Backend ready', action: 'connect-github' },
+const TIMELINE_ITEM_CONFIG = {
+  'task-created': { icon: ListPlus, label: 'Task created', tone: 'border-yellow bg-yellow-soft text-yellow' },
+  'task-completed': { icon: CheckCircle2, label: 'Task completed', tone: 'border-accent bg-accent-soft text-accent' },
+  'coding-activity': { icon: Code2, label: 'Coding activity', tone: 'border-coral bg-coral-soft text-coral' },
+}
+
+// Replaces the old standalone Timeline page: a compact, read-only view of the
+// same tasks+activity story, capped to recent items instead of a paginated
+// week-by-week feed — a quick "what happened recently" glance rather than a
+// second management surface (the Activity feed section below already owns
+// that, with delete).
+function UnifiedTimeline({ items, limit = 10 }) {
+  const recent = items.slice(0, limit)
+
+  if (!recent.length) {
+    return <Card><EmptyState compact icon={ListPlus} title="Nothing yet" description="Tasks and coding activity will appear here as you go." /></Card>
+  }
+
+  const groups = []
+  let currentDay = null
+  for (const item of recent) {
+    const dayKey = new Date(item.timestamp).toDateString()
+    if (dayKey !== currentDay) {
+      groups.push({ dayKey, label: formatDayLabel(item.timestamp), entries: [] })
+      currentDay = dayKey
+    }
+    groups[groups.length - 1].entries.push(item)
+  }
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.dayKey}>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-faint">{group.label}</p>
+            <div className="space-y-4 border-l-2 border-line pl-4">
+              {group.entries.map((item) => {
+                const config = TIMELINE_ITEM_CONFIG[item.type] || TIMELINE_ITEM_CONFIG['coding-activity']
+                const Icon = config.icon
+                return (
+                  <div key={item.id} className="relative flex items-start gap-3">
+                    <div className={`absolute -left-[26px] top-0.5 grid size-6 place-items-center rounded-full border ${config.tone}`}><Icon size={12} /></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold text-copy">{item.title}</p>
+                        <span className="shrink-0 text-xs text-faint">{formatTime(item.timestamp)}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">{config.label} · {item.context}{item.durationMinutes ? ` · ${formatMinutes(item.durationMinutes)}` : ''}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+const getSources = (extension, github) => [
+  {
+    icon: Github,
+    title: 'GitHub',
+    detail: github.status.repository ? `Syncing to ${github.status.repository.fullName}` : 'Commits and meaningful repository activity',
+    status: github.status.repository ? 'Connected' : github.status.connected ? 'Repository needed' : 'Not connected',
+    action: github.status.repository ? 'view-github' : 'connect-github',
+    connected: Boolean(github.status.repository),
+  },
   {
     icon: Chrome,
     title: 'Browser extension',
@@ -176,12 +245,14 @@ export default function Activity() {
   const { activities, isLoading, error, refetch, addActivity, removeActivity } = useActivities()
   const dsaSummaryQuery = useDsaSummary()
   const extension = useExtension()
+  const github = useGithubIntegration()
+  const timeline = useTimeline()
   const [showLogModal, setShowLogModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [pendingId, setPendingId] = useState(null)
 
-  const sources = getSources(extension)
+  const sources = getSources(extension, github)
 
   const handleLogActivity = async (activity) => {
     setIsSaving(true)
@@ -214,7 +285,9 @@ export default function Activity() {
 
   const handleConnectSource = (action) => {
     if (!action) return
-    if (action === 'connect-github') {
+    if (action === 'view-github') {
+      navigate('/github')
+    } else if (action === 'connect-github') {
       navigate('/settings')
     } else if (action === 'install-extension') {
       navigate(extension.isInstalled ? '/settings' : '/install')
@@ -232,9 +305,18 @@ export default function Activity() {
           onRetry={() => dsaSummaryQuery.refetch().catch((retryError) => toast.error(retryError.message || 'Still unable to load.'))}
         />
       </Section>
+      <Section title="Timeline" description="Tasks and coding activity, most recent first.">
+        {timeline.isLoading ? (
+          <Card><LoadingState label="Building your timeline" /></Card>
+        ) : timeline.error ? (
+          <Card><ErrorState title="Timeline could not load" description={timeline.error.message} action={<Button variant="secondary" onClick={() => timeline.refetch().catch((retryError) => toast.error(retryError.message || 'Still unable to load.'))}>Retry</Button>} /></Card>
+        ) : (
+          <UnifiedTimeline items={timeline.items} />
+        )}
+      </Section>
       <Section title="Connected sources" description="Choose which signals Momentum can use to understand your progress.">
         <div className="grid gap-4 md:grid-cols-2">
-          {sources.map(({ icon: Icon, title, detail, status, action, connected }) => <Card key={title} className="flex items-start gap-4 p-5"><div className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={19} /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="font-display text-[15px] font-bold">{title}</p><Badge tone={connected ? "green" : undefined}>{status}</Badge></div><p className="mt-1.5 text-sm leading-5 text-muted">{detail}</p>{action && <Button variant="ghost" className="mt-3 h-8 px-0 text-accent" onClick={() => handleConnectSource(action)}>Connect source</Button>}</div></Card>)}
+          {sources.map(({ icon: Icon, title, detail, status, action, connected }) => <Card key={title} className="flex items-start gap-4 p-5"><div className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={19} /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="font-display text-[15px] font-bold">{title}</p><Badge tone={connected ? "green" : undefined}>{status}</Badge></div><p className="mt-1.5 text-sm leading-5 text-muted">{detail}</p>{action && <Button variant="ghost" className="mt-3 h-8 px-0 text-accent" onClick={() => handleConnectSource(action)}>{action === 'view-github' ? 'View GitHub activity' : 'Connect source'}</Button>}</div></Card>)}
         </div>
       </Section>
       <Section title="Activity feed" description="Coding sessions, commits, and practice submissions form a single history.">
