@@ -39,26 +39,55 @@
     return match ? match[1] : '';
   }
 
-  // Reads LeetCode's own elapsed-time display (e.g. "Your Time: 2m 35s") rather than
-  // guessing from our own page-load timer — this is the platform's real clock.
+  // Reads LeetCode's own elapsed-time display. LeetCode's built-in timer widget
+  // shows a "HH:MM:SS" (or "MM:SS") stopwatch in the toolbar — match a leaf element
+  // whose entire visible text is a clock reading so we target it precisely instead
+  // of scanning the whole page. Falls back to a "Your Time: …" label if present.
+  // Defensive: any failure returns null so it can never break the solve pipeline.
   function extractTimerSeconds() {
-    const text = normalizeText(collectVisibleText(['div', 'span', 'button']));
-    const match = text.match(/your\s*time\s*:?\s*((?:\d+\s*h\s*)?(?:\d+\s*m\s*)?(?:\d+\s*s)?)/i);
-    if (!match || !match[1] || !match[1].trim()) return null;
-    return parseDurationTextToSeconds(match[1]);
+    try {
+      const clockEl = findVisibleElementByText(/^\d{1,2}:\d{1,2}(?::\d{1,2})?$/, ['span', 'div', 'button']);
+      if (clockEl) {
+        const raw = normalizeText(clockEl.textContent);
+        const seconds = parseDurationTextToSeconds(raw);
+        console.log('[Momentum][duration] LeetCode timer candidate (clock):', JSON.stringify(raw), '=>', seconds);
+        if (Number.isFinite(seconds) && seconds > 0) return seconds;
+      }
+
+      const labeled = normalizeText(collectVisibleText(['[class*="time"]', '[class*="timer"]']));
+      const match = labeled.match(/(?:your\s*time|time\s*taken)\s*:?\s*((?:\d+\s*h\s*)?(?:\d+\s*m\s*)?(?:\d+\s*s)?)/i);
+      if (match && match[1] && match[1].trim()) {
+        const seconds = parseDurationTextToSeconds(match[1]);
+        console.log('[Momentum][duration] LeetCode timer candidate (labeled):', JSON.stringify(match[1]), '=>', seconds);
+        if (Number.isFinite(seconds) && seconds > 0) return seconds;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('[Momentum][duration] LeetCode timer extraction failed:', error);
+      return null;
+    }
   }
 
   function extractDifficulty() {
-    const el = findVisibleElementByText(/^(Easy|Medium|Hard)$/i, ['div', 'span', 'a', 'button']);
-    if (!el) return null;
-    const text = normalizeText(el.textContent);
-    return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+    try {
+      const el = findVisibleElementByText(/^(Easy|Medium|Hard)$/i, ['div', 'span', 'a', 'button']);
+      if (!el) return null;
+      const text = normalizeText(el.textContent);
+      return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+    } catch {
+      return null;
+    }
   }
 
   function extractLanguage() {
-    const pattern = new RegExp(`^(${KNOWN_LANGUAGES.map(escapeRegExp).join('|')})\\s*(?:\\(.*\\))?$`, 'i');
-    const el = findVisibleElementByText(pattern, ['button', 'div', 'span']);
-    return el ? normalizeText(el.textContent) : null;
+    try {
+      const pattern = new RegExp(`^(${KNOWN_LANGUAGES.map(escapeRegExp).join('|')})\\s*(?:\\(.*\\))?$`, 'i');
+      const el = findVisibleElementByText(pattern, ['button', 'div', 'span']);
+      return el ? normalizeText(el.textContent) : null;
+    } catch {
+      return null;
+    }
   }
 
   self.__MomentumPlatforms.leetcode = {

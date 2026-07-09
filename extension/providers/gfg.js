@@ -7,7 +7,35 @@
 (function () {
   if (!self.__MomentumPlatforms) self.__MomentumPlatforms = {};
 
-  const { normalizeText, collectVisibleText } = self.__MomentumDOMUtils;
+  const { normalizeText, collectVisibleText, findVisibleElementByText, parseDurationTextToSeconds } = self.__MomentumDOMUtils;
+
+  // GFG's practice IDE shows an elapsed-time label ("Your Time: 2m 35s") in the
+  // editor toolbar. Read that; also handle a bare "HH:MM:SS"/"MM:SS" clock as a
+  // fallback. Defensive: any failure returns null so it never breaks detection.
+  function extractTimerSeconds() {
+    try {
+      const labeled = normalizeText(collectVisibleText(['[class*="time"]', '[class*="timer"]', 'header', 'nav']));
+      const match = labeled.match(/(?:your\s*time|time\s*taken)\s*:?\s*((?:\d+\s*h\s*)?(?:\d+\s*m\s*)?(?:\d+\s*s)?)/i);
+      if (match && match[1] && match[1].trim()) {
+        const seconds = parseDurationTextToSeconds(match[1]);
+        console.log('[Momentum][duration] GFG timer candidate (labeled):', JSON.stringify(match[1]), '=>', seconds);
+        if (Number.isFinite(seconds) && seconds > 0) return seconds;
+      }
+
+      const clockEl = findVisibleElementByText(/^\d{1,2}:\d{1,2}(?::\d{1,2})?$/, ['span', 'div']);
+      if (clockEl) {
+        const raw = normalizeText(clockEl.textContent);
+        const seconds = parseDurationTextToSeconds(raw);
+        console.log('[Momentum][duration] GFG timer candidate (clock):', JSON.stringify(raw), '=>', seconds);
+        if (Number.isFinite(seconds) && seconds > 0) return seconds;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('[Momentum][duration] GFG timer extraction failed:', error);
+      return null;
+    }
+  }
 
   const RESULT_SELECTORS = [
     '.result-status',
@@ -81,6 +109,8 @@
         signals,
       };
     },
+
+    extractTimerSeconds,
 
     extractProblemData() {
       const slug = getSlugFromUrl();

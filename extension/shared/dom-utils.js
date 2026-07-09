@@ -42,11 +42,25 @@
     return null;
   }
 
-  // Parses a duration string like "2m 35s", "18m 12s", "1h 05m", or "45s" into
-  // total seconds. Returns null if no hour/minute/second component is found.
+  // Parses a duration string into total seconds. Handles two families:
+  //   - Colon stopwatch: "00:03:45"/"3:45"/"1:05:00" (3 groups = h:m:s, 2 = m:s)
+  //   - Letter format:   "2m 35s", "18m", "1h 05m", "1h 15m 08s", "45s"
+  // Returns null if neither shape is present.
   function parseDurationTextToSeconds(text) {
     if (!text) return null;
     const normalized = String(text).trim();
+
+    // Colon stopwatch — the whole candidate must be a clock reading.
+    const colon = normalized.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+    if (colon) {
+      const a = parseInt(colon[1], 10);
+      const b = parseInt(colon[2], 10);
+      const c = colon[3] != null ? parseInt(colon[3], 10) : null;
+      // 3 groups → h:m:s; 2 groups → m:s
+      return c != null ? a * 3600 + b * 60 + c : a * 60 + b;
+    }
+
+    // Letter format.
     const hoursMatch = normalized.match(/(\d+)\s*h/i);
     const minutesMatch = normalized.match(/(\d+)\s*m(?!s)/i);
     const secondsMatch = normalized.match(/(\d+)\s*s/i);

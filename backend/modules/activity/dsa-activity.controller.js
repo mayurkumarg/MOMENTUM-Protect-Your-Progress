@@ -52,6 +52,14 @@ const createDsaActivity = async (req, res, next) => {
       difficulty,
     } = req.body;
 
+    // [Momentum][duration] temporary debug — remove after verifying the chain.
+    console.log('[Momentum][duration] received:', {
+      problemTitle,
+      durationSeconds,
+      durationMinutes,
+      isEstimatedDuration,
+    });
+
     // ── Validate required fields ──────────────────────────────────────
     const missing = [];
     if (!platform) missing.push('platform');
@@ -129,6 +137,14 @@ const createDsaActivity = async (req, res, next) => {
       req.user.userId,
       activityData
     );
+
+    // [Momentum][duration] temporary debug — remove after verifying the chain.
+    console.log('[Momentum][duration] stored:', {
+      title: activity.title,
+      durationSeconds: activity.durationSeconds,
+      durationMinutes: activity.durationMinutes,
+      isEstimatedDuration: activity.isEstimatedDuration,
+    });
 
     res.status(201).json({
       success: true,

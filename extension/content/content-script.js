@@ -28,6 +28,9 @@ console.log('[Momentum] Content script loaded');
   let urlPollTimer = null;
   let observer = null;
   let lastRelevantMutationAt = 0;
+  // The platform's own timer reading, captured at submit time (when the editor
+  // toolbar is guaranteed visible) — the accurate "time taken to solve". Reset per problem.
+  let capturedTimerSeconds = null;
 
   function log(...args) {
     console.log('[Momentum]', ...args);
@@ -101,6 +104,23 @@ console.log('[Momentum] Content script loaded');
     return Math.min(Math.max(minutes, min), max);
   }
 
+  // Reads the platform's own on-page timer (if the adapter supports it) and stores
+  // the latest good reading. Called at submit time — when the editor toolbar (and its
+  // timer) is guaranteed visible — so we don't miss it if the result view hides the
+  // timer later. Never throws.
+  function captureTimer(adapter) {
+    try {
+      if (!adapter || typeof adapter.extractTimerSeconds !== 'function') return;
+      const seconds = adapter.extractTimerSeconds();
+      if (Number.isFinite(seconds) && seconds > 0) {
+        capturedTimerSeconds = seconds;
+        log('[Momentum][duration] captured platform timer:', { platform: adapter.name, seconds });
+      }
+    } catch (error) {
+      warn('[Momentum][duration] captureTimer failed:', error);
+    }
+  }
+
   // Falls back to the in-memory pageLoadedAt (this-session clock) if no stored
   // session is found, so a solve still gets a real elapsed time rather than a
   // fabricated one.
@@ -148,6 +168,7 @@ console.log('[Momentum] Content script loaded');
     submission = null;
     sendInFlight = false;
     lastRelevantMutationAt = 0;
+    capturedTimerSeconds = null;
 
     if (adapter) ensureProblemSession(nextKey);
 
@@ -183,6 +204,10 @@ console.log('[Momentum] Content script loaded');
 
     const now = Date.now();
     const problemKey = getProblemKey(adapter);
+
+    // Read the platform's own elapsed-time now, while the editor toolbar is still
+    // on screen — the submission result view may hide it moments later.
+    captureTimer(adapter);
 
     submission = {
       id: `${problemKey}:${now}`,
@@ -497,17 +522,28 @@ console.log('[Momentum] Content script loaded');
   async function sendSolved(adapter, problemKey, detection) {
     if (sendInFlight) return;
 
-    const data = adapter.extractProblemData();
+    // Metadata extraction must never be able to abort the send — a solve going
+    // uncaptured is worse than a solve with a thin payload.
+    let data;
+    try {
+      data = adapter.extractProblemData() || {};
+    } catch (error) {
+      warn('extractProblemData failed, sending minimal payload:', error);
+      data = {};
+    }
     data.platform = data.platform || adapter.name;
     data.url = data.url || window.location.href;
     data.solvedAt = data.solvedAt || new Date().toISOString();
 
-    // Prefer the platform's own elapsed-time display (real clock) over our wall-clock
-    // estimate; fall back and mark as estimated when the platform doesn't show one.
-    const timerSeconds = typeof adapter.extractTimerSeconds === 'function' ? adapter.extractTimerSeconds() : null;
-    if (Number.isFinite(timerSeconds) && timerSeconds > 0) {
-      data.durationSeconds = timerSeconds;
-      data.durationMinutes = clampDuration(Math.round(timerSeconds / 60));
+    // Prefer the platform's own timer: the value captured at submit time, else a
+    // fresh read now. Fall back to our wall-clock estimate (marked estimated) only
+    // when the platform shows no timer at all.
+    if (capturedTimerSeconds == null) {
+      captureTimer(adapter);
+    }
+    if (Number.isFinite(capturedTimerSeconds) && capturedTimerSeconds > 0) {
+      data.durationSeconds = capturedTimerSeconds;
+      data.durationMinutes = clampDuration(Math.round(capturedTimerSeconds / 60));
       data.isEstimatedDuration = false;
     } else {
       data.durationMinutes = await computeDurationMinutes(problemKey);
@@ -528,6 +564,11 @@ console.log('[Momentum] Content script loaded');
       platform: data.platform,
       problemTitle: data.problemTitle,
       problemKey,
+    });
+    log('[Momentum][duration] payload duration:', {
+      durationSeconds: data.durationSeconds,
+      durationMinutes: data.durationMinutes,
+      isEstimatedDuration: data.isEstimatedDuration,
     });
 
     try {
