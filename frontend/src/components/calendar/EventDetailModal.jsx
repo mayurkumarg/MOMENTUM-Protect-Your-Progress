@@ -5,7 +5,8 @@ import Modal from '../Modal'
 import { Badge, Button } from '../ui'
 import { useToast } from '../ToastProvider'
 import { formatActivityDuration, formatDateTime } from '../../utils/format'
-import { describeReminder, STATUS_OPTIONS } from '../../utils/tasks'
+import { STATUS_OPTIONS } from '../../utils/tasks'
+import { describeReminder } from '../../utils/reminders'
 
 const statusLabel = (value) => STATUS_OPTIONS.find((option) => option.value === value)?.label || value
 

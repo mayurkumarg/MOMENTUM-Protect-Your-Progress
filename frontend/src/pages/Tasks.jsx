@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import ReminderFields from '../components/ReminderFields'
 import SubtaskChecklist from '../components/SubtaskChecklist'
 import TagInput from '../components/TagInput'
 import WorkList from '../components/WorkList'
@@ -10,20 +11,18 @@ import { useToast } from '../components/ToastProvider'
 import { Button, Card, EmptyState, ErrorState, IconButton, Input, LoadingState, PageHeader, Section, SegmentedControl } from '../components/ui'
 import { useTasks } from '../hooks/useTasks'
 import { formatDayLabel, toDateTimeInputValue } from '../utils/format'
+import { buildReminderPayload, reminderToFormValue } from '../utils/reminders'
 import {
   DEFAULT_TASK_FILTERS,
   GROUP_OPTIONS,
   PRIORITY_DOT,
   PRIORITY_OPTIONS,
-  REMINDER_OPTIONS,
   SORT_OPTIONS,
   STATUS_OPTIONS,
   applyTaskFilters,
-  buildReminderPayload,
   groupTasksBy,
   hasActiveTaskFilters,
   mapTaskToWorkItem,
-  reminderToFormValue,
   sortTasks,
   splitTasks,
 } from '../utils/tasks'
@@ -35,48 +34,6 @@ const priorityValueToLabel = (value) => PRIORITY_OPTIONS.find((option) => option
 const priorityLabelToValue = (label) => PRIORITY_OPTIONS.find((option) => option.label === label)?.value || 'MEDIUM'
 const statusValueToLabel = (value) => STATUS_OPTIONS.find((option) => option.value === value)?.label || 'Pending'
 const statusLabelToValue = (label) => STATUS_OPTIONS.find((option) => option.label === label)?.value || 'PENDING'
-
-// Requesting Notification permission here (not on page load) ties the
-// browser prompt to a direct user action — enabling a reminder — which is
-// both good practice and far more likely to be granted than an ambient ask.
-const requestNotificationPermission = () => {
-  if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-    Notification.requestPermission().catch(() => {})
-  }
-}
-
-function ReminderFields({ reminderOffset, setReminderOffset, customReminderAt, setCustomReminderAt, deadline }) {
-  const handleReminderChange = (value) => {
-    setReminderOffset(value)
-    if (value) requestNotificationPermission()
-  }
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <label className="block">
-        <span className="mb-2 block text-sm font-semibold text-copy">Reminder</span>
-        <select
-          value={reminderOffset}
-          onChange={(event) => handleReminderChange(event.target.value)}
-          className="focus-ring h-11 w-full rounded-md border border-line bg-surface px-3.5 text-sm text-copy"
-        >
-          <option value="">No reminder</option>
-          {REMINDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
-      {reminderOffset === 'custom' && (
-        <Input
-          label="Remind me at"
-          type="datetime-local"
-          value={customReminderAt}
-          onChange={(event) => setCustomReminderAt(event.target.value)}
-          max={deadline}
-          required
-        />
-      )}
-    </div>
-  )
-}
 
 const emptyTask = {
   title: '',

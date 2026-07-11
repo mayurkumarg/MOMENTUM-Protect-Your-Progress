@@ -54,3 +54,11 @@ export function getCurrentUser() {
     auth: true,
   })
 }
+
+export function updateNotificationPreferences(reminderChannel) {
+  return apiRequest('/auth/preferences', {
+    method: 'PATCH',
+    auth: true,
+    body: { reminderChannel },
+  })
+}

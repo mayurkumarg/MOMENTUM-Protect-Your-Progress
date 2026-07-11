@@ -54,6 +54,12 @@ export function AuthProvider({ children }) {
     setAuth({ token, user, status: 'authenticated', reason: null })
   }, [])
 
+  // Merges partial fields (e.g. a fresh notificationPreferences after a
+  // Settings change) into the current user without a full re-login/refetch.
+  const updateUser = useCallback((partialUser) => {
+    setAuth((current) => (current.user ? { ...current, user: { ...current.user, ...partialUser } } : current))
+  }, [])
+
   const signOut = useCallback((reason = null) => {
     clearStoredAuth()
     setAuth({ token: null, user: null, status: 'unauthenticated', reason })
@@ -133,7 +139,8 @@ export function AuthProvider({ children }) {
     setSession,
     refreshSession,
     signOut,
-  }), [auth, refreshSession, setSession, signOut])
+    updateUser,
+  }), [auth, refreshSession, setSession, signOut, updateUser])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

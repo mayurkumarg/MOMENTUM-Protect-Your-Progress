@@ -40,6 +40,13 @@ const reminderSchema = new Schema(
       type: Date,
       default: null,
     },
+    // Tracked independently of notifiedAt (the in-app flag) so the email
+    // channel and the in-app channel never race each other into suppressing
+    // one another — see backend/modules/notifications/reminder.scheduler.js.
+    emailSentAt: {
+      type: Date,
+      default: null,
+    },
   },
   { _id: false }
 );

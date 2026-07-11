@@ -23,5 +23,6 @@ router.post('/refresh', refreshLimiter, authController.refresh);
 
 // User
 router.get('/me', authMiddleware, authController.me);
+router.patch('/preferences', authMiddleware, authController.updatePreferences);
 
 module.exports = router;

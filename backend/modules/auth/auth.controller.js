@@ -1,4 +1,5 @@
 const authService = require('./auth.service');
+const userService = require('../user/user.service');
 const { validateRegisterInput, validateLoginInput } = require('./auth.validation');
 
 const encodeRedirectParam = (value) => encodeURIComponent(value);
@@ -231,6 +232,17 @@ const me = async (req, res, next) => {
   }
 };
 
+// Update notification/reminder preferences
+const updatePreferences = async (req, res, next) => {
+  try {
+    const { reminderChannel } = req.body;
+    const user = await userService.updateNotificationPreferences(req.user.userId, reminderChannel);
+    return sendSuccess(res, 200, user);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Refresh access token
 const refresh = async (req, res, next) => {
   try {
@@ -259,5 +271,6 @@ module.exports = {
   getGithubConnectUrl,
   githubCallback,
   me,
+  updatePreferences,
   refresh,
 };

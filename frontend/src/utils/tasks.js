@@ -29,18 +29,6 @@ export const GROUP_OPTIONS = [
   { value: 'priority', label: 'Priority' },
 ]
 
-// `minutes` is the number of minutes before the deadline; 'custom' means the
-// task carries its own absolute remindAt instead of an offset.
-export const REMINDER_OPTIONS = [
-  { value: '0', label: 'At due time', minutes: 0 },
-  { value: '5', label: '5 minutes before', minutes: 5 },
-  { value: '15', label: '15 minutes before', minutes: 15 },
-  { value: '30', label: '30 minutes before', minutes: 30 },
-  { value: '60', label: '1 hour before', minutes: 60 },
-  { value: '1440', label: '1 day before', minutes: 1440 },
-  { value: 'custom', label: 'Custom time...', minutes: null },
-]
-
 export function mapTaskToWorkItem(task) {
   const completed = task.status === 'COMPLETED'
 
@@ -157,34 +145,3 @@ export function applyTaskFilters(tasks, filters) {
   })
 }
 
-// Human label for a task's current reminder setting, e.g. "1 hour before" or
-// "Custom time" — used wherever a task's reminder needs a one-line summary.
-export function describeReminder(reminder) {
-  if (!reminder?.enabled) return null
-  if (reminder.isCustom) return 'Custom time'
-  const match = REMINDER_OPTIONS.find((option) => option.minutes === reminder.offsetMinutes)
-  return match ? match.label : `${reminder.offsetMinutes} minutes before`
-}
-
-// Turns the reminder form fields (a select value + optional custom
-// datetime-local string) into the `reminder` object the API expects.
-export function buildReminderPayload(reminderOffset, customReminderAt) {
-  if (!reminderOffset) {
-    return { enabled: false, offsetMinutes: 0, isCustom: false, remindAt: null }
-  }
-
-  if (reminderOffset === 'custom') {
-    if (!customReminderAt) return { enabled: false, offsetMinutes: 0, isCustom: false, remindAt: null }
-    return { enabled: true, offsetMinutes: 0, isCustom: true, remindAt: new Date(customReminderAt).toISOString() }
-  }
-
-  return { enabled: true, offsetMinutes: Number(reminderOffset), isCustom: false, remindAt: null }
-}
-
-// Inverse of buildReminderPayload — derives the form's select value from a
-// task's stored reminder, for pre-filling the edit form.
-export function reminderToFormValue(reminder) {
-  if (!reminder?.enabled) return ''
-  if (reminder.isCustom) return 'custom'
-  return String(reminder.offsetMinutes ?? 0)
-}

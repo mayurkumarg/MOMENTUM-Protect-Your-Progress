@@ -7,18 +7,26 @@ const CHECK_INTERVAL_MS = 30 * 1000
 const REFRESH_INTERVAL_MS = 3 * 60 * 1000
 
 // Mounted once at the app shell level so reminders fire no matter which page
-// the user is on. Deliberately client-side: Momentum has no email/push
-// backend, so a reminder is a toast + (if permitted) a browser Notification
-// while the app is open — reliable for that scope, but it won't wake up a
-// closed tab. See modules/task/task.model.js for how remindAt is computed.
+// the user is on. Purely client-side: a toast + (if permitted) a browser
+// Notification while the app is open — reliable for that scope, but it won't
+// wake up a closed tab. Email delivery (for users who opt into Email/Both in
+// Settings) is a completely separate backend path — see
+// backend/modules/notifications/reminder.scheduler.js — that tracks its own
+// emailSentAt independently of this hook's in-app notifiedAt, specifically so
+// the two channels never race each other. The one thing this hook reads from
+// that preference is whether to suppress its own toast/Notification entirely
+// (channel === 'EMAIL', i.e. the user asked for email only).
+// See modules/task/task.model.js for how remindAt is computed.
 export function useTaskReminders() {
   const auth = useAuth()
   const toast = useToast()
   const tasksRef = useRef([])
   const notifiedRef = useRef(new Set())
+  const reminderChannel = auth.user?.notificationPreferences?.reminderChannel || 'IN_APP'
 
   useEffect(() => {
     if (!auth.isAuthenticated) return undefined
+    if (reminderChannel === 'EMAIL') return undefined
 
     let cancelled = false
 
@@ -75,5 +83,5 @@ export function useTaskReminders() {
       clearInterval(checkTimer)
       clearInterval(refreshTimer)
     }
-  }, [auth.isAuthenticated, toast])
+  }, [auth.isAuthenticated, reminderChannel, toast])
 }

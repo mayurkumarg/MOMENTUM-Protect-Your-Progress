@@ -13,6 +13,9 @@ const serializeUser = (user) => ({
   githubId: user.githubId,
   authProvider: user.authProvider,
   isEmailVerified: user.isEmailVerified,
+  notificationPreferences: {
+    reminderChannel: user.notificationPreferences?.reminderChannel || 'IN_APP',
+  },
 });
 
 const findOrCreateGithubUser = async (githubId, githubUserData) => {
@@ -92,6 +95,29 @@ const removeAllRefreshTokens = async (userId) => {
   return RefreshToken.deleteMany({ userId });
 };
 
+const REMINDER_CHANNELS = ['IN_APP', 'EMAIL', 'BOTH'];
+
+const updateNotificationPreferences = async (userId, reminderChannel) => {
+  if (!REMINDER_CHANNELS.includes(reminderChannel)) {
+    throw new AppError('Invalid reminder channel.', 400);
+  }
+
+  const user = await User.findById(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  // Email/Both require an address to actually send to — GitHub-OAuth users
+  // with a private email have none on file, and there's no email-management
+  // UI yet to fix that from here.
+  if (reminderChannel !== 'IN_APP' && !user.email) {
+    throw new AppError('Add an email to your account before enabling email reminders.', 400);
+  }
+
+  user.notificationPreferences = { reminderChannel };
+  await user.save();
+
+  return serializeUser(user);
+};
+
 module.exports = {
   serializeUser,
   findOrCreateGithubUser,
@@ -103,4 +129,5 @@ module.exports = {
   findUserByRefreshToken,
   removeRefreshToken,
   removeAllRefreshTokens,
+  updateNotificationPreferences,
 };

@@ -4,13 +4,23 @@ import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../components/ConfirmDialog'
 import GithubIntegrationPanel from '../components/GithubIntegrationPanel'
 import { useToast } from '../components/ToastProvider'
-import { Badge, Button, Card, Input, PageHeader, Section } from '../components/ui'
+import { Badge, Button, Card, Input, PageHeader, SegmentedControl, Section } from '../components/ui'
 import ThemeSelector from '../components/ThemeSelector'
 import { useAuth } from '../auth/AuthProvider'
 import { useLogout } from '../auth/hooks'
 import { useExtension } from '../hooks/useExtension'
+import { updateNotificationPreferences } from '../api/auth'
 
 const FOCUS_STORAGE_KEY = 'momentum-current-focus'
+
+const REMINDER_CHANNEL_OPTIONS = [
+  { value: 'IN_APP', label: 'In-app' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'BOTH', label: 'Both' },
+]
+const REMINDER_CHANNEL_LABELS = REMINDER_CHANNEL_OPTIONS.map((option) => option.label)
+const channelToLabel = (value) => REMINDER_CHANNEL_OPTIONS.find((option) => option.value === value)?.label || 'In-app'
+const labelToChannel = (label) => REMINDER_CHANNEL_OPTIONS.find((option) => option.label === label)?.value || 'IN_APP'
 
 function SettingRow({ icon: Icon, title, description, children }) {
   return <div className="flex flex-col gap-4 border-b border-line px-5 py-5 last:border-0 sm:flex-row sm:items-center"><div className="flex min-w-0 flex-1 gap-3"><div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={17} /></div><div><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs leading-5 text-faint">{description}</p></div></div><div className="shrink-0">{children}</div></div>
@@ -25,6 +35,30 @@ export default function Settings() {
   const [focus, setFocus] = useState(() => localStorage.getItem(FOCUS_STORAGE_KEY) || '')
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const [isSavingChannel, setIsSavingChannel] = useState(false)
+
+  const hasEmail = Boolean(auth.user?.email)
+  const reminderChannel = auth.user?.notificationPreferences?.reminderChannel || 'IN_APP'
+
+  const handleChannelChange = async (label) => {
+    const channel = labelToChannel(label)
+    if (channel === reminderChannel) return
+    if (channel !== 'IN_APP' && !hasEmail) {
+      toast.error('Add an email to your account before enabling email reminders.')
+      return
+    }
+
+    setIsSavingChannel(true)
+    try {
+      const updatedUser = await updateNotificationPreferences(channel)
+      auth.updateUser(updatedUser)
+      toast.success('Reminder preference updated.')
+    } catch (error) {
+      toast.error(error.message || 'Could not update reminder preference.')
+    } finally {
+      setIsSavingChannel(false)
+    }
+  }
 
   const handleFocusChange = (event) => {
     const value = event.target.value
@@ -73,7 +107,18 @@ export default function Settings() {
           </Section>
           <Section title="Preferences">
             <Card>
-              <SettingRow icon={Bell} title="Reminders" description="Set per task — add or edit one from the Tasks page."><Button variant="secondary" onClick={() => navigate('/tasks')}>Go to Tasks</Button></SettingRow>
+              <SettingRow
+                icon={Bell}
+                title="Reminders"
+                description={hasEmail
+                  ? 'Choose how you want to be notified. Set individual reminders from Tasks or Placements.'
+                  : 'Set individual reminders from Tasks or Placements. Add an email to your account to enable email reminders.'}
+              >
+                <div className="flex flex-col items-end gap-1.5">
+                  <SegmentedControl options={REMINDER_CHANNEL_LABELS} value={channelToLabel(reminderChannel)} onChange={handleChannelChange} />
+                  {isSavingChannel && <span className="text-[11px] text-faint">Saving…</span>}
+                </div>
+              </SettingRow>
               <SettingRow icon={Palette} title="Appearance" description="Choose a comfortable workspace theme or follow your system."><ThemeSelector /></SettingRow>
             </Card>
           </Section>

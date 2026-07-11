@@ -20,6 +20,39 @@ const COMPANY_STATUS = Object.freeze({
   WITHDRAWN: 'WITHDRAWN',
 });
 
+// Same shape as Task's reminder subschema (task.model.js) — offset/custom
+// pattern, remindAt computed on save, notifiedAt (in-app) and emailSentAt
+// (email channel) tracked independently so the two never race each other.
+const eventReminderSchema = new Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    offsetMinutes: {
+      type: Number,
+      default: 0,
+    },
+    isCustom: {
+      type: Boolean,
+      default: false,
+    },
+    remindAt: {
+      type: Date,
+      default: null,
+    },
+    notifiedAt: {
+      type: Date,
+      default: null,
+    },
+    emailSentAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const importantDateSchema = new Schema(
   {
     label: {
@@ -38,6 +71,10 @@ const importantDateSchema = new Schema(
       trim: true,
       maxlength: [500, 'Notes must be at most 500 characters.'],
       default: '',
+    },
+    reminder: {
+      type: eventReminderSchema,
+      default: () => ({}),
     },
   },
   { timestamps: false }
@@ -120,6 +157,29 @@ const companySchema = new Schema(
 );
 
 companySchema.index({ userId: 1, status: 1 });
+companySchema.index({ userId: 1, 'importantDates.reminder.remindAt': 1 });
+
+// Important dates are date-only (no time-of-day input in the UI) — an
+// offset-based reminder anchors to 9:00 AM local on that date. A custom
+// reminder stores its own exact remindAt directly and is left untouched here.
+// Mirrors task.model.js's setReminderRemindAt: unconditional and idempotent,
+// safe to run on every save regardless of what changed.
+const DEFAULT_REMINDER_HOUR = 9;
+
+companySchema.pre('save', function setImportantDateReminders() {
+  for (const entry of this.importantDates) {
+    if (!entry.reminder || !entry.reminder.enabled) {
+      if (entry.reminder) entry.reminder.remindAt = null;
+      continue;
+    }
+
+    if (!entry.reminder.isCustom) {
+      const base = new Date(entry.date);
+      base.setHours(DEFAULT_REMINDER_HOUR, 0, 0, 0);
+      entry.reminder.remindAt = new Date(base.getTime() - entry.reminder.offsetMinutes * 60000);
+    }
+  }
+});
 
 module.exports = mongoose.models.Company || mongoose.model('Company', companySchema);
 module.exports.COMPANY_STATUS = COMPANY_STATUS;

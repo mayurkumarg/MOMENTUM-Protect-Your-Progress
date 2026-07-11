@@ -256,11 +256,16 @@ const updateTask = async (userId, taskId, updates) => {
     const deadlineChanged = Boolean(previousDeadline) && Boolean(task.deadline) && previousDeadline.getTime() !== task.deadline.getTime();
     const changed = reminderScheduleChanged(previousReminder, task.reminder.toObject(), deadlineChanged);
     const callerSetNotifiedAt = Object.prototype.hasOwnProperty.call(updates.reminder, 'notifiedAt');
+    // emailSentAt gets the exact same treatment as notifiedAt, independently
+    // — it's the email channel's own "already fired" flag (see task.model.js).
+    const callerSetEmailSentAt = Object.prototype.hasOwnProperty.call(updates.reminder, 'emailSentAt');
 
     if (changed) {
       task.reminder.notifiedAt = null;
-    } else if (!callerSetNotifiedAt) {
-      task.reminder.notifiedAt = previousReminder?.notifiedAt || null;
+      task.reminder.emailSentAt = null;
+    } else {
+      if (!callerSetNotifiedAt) task.reminder.notifiedAt = previousReminder?.notifiedAt || null;
+      if (!callerSetEmailSentAt) task.reminder.emailSentAt = previousReminder?.emailSentAt || null;
     }
   }
 
