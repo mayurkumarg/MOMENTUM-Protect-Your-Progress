@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Momentum</title>
+  <style>
+    :root {
+      --canvas: 246 247 244;
+      --surface: 255 255 255;
+      --surface-subtle: 241 244 240;
+      --line: 226 229 224;
+      --ink: 24 32 29;
+      --copy: 53 64 59;
+      --muted: 109 118 113;
+      --faint: 137 145 140;
+      --accent: 40 122 92;
+      --accent-soft: 228 241 234;
+      --coral: 169 87 62;
+      --coral-soft: 250 233 226;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: 23 28 26;
+        --surface: 31 38 35;
+        --surface-subtle: 38 46 42;
+        --line: 53 63 58;
+        --ink: 235 240 236;
+        --copy: 204 214 208;
+        --muted: 158 171 164;
+        --faint: 125 139 131;
+        --accent: 105 190 153;
+        --accent-soft: 38 70 56;
+        --coral: 228 142 111;
+        --coral-soft: 78 49 41;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: rgb(var(--canvas));
+      color: rgb(var(--copy));
+      padding: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      background: rgb(var(--surface));
+      border: 1px solid rgb(var(--line));
+      border-radius: 14px;
+      padding: 22px 20px 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      margin-bottom: 4px;
+    }
+
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #182420;
+      color: #f6b93b;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+    }
+
+    .brand-mark svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .brand-name {
+      color: rgb(var(--ink));
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-tagline {
+      text-align: center;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: rgb(var(--faint));
+      margin-bottom: 20px;
+    }
+
+    .login-section {
+      display: none;
+    }
+
+    .login-section.active {
+      display: block;
+    }
+
+    .user-section {
+      display: none;
+    }
+
+    .user-section.active {
+      display: block;
+    }
+
+    .user-info {
+      background: rgb(var(--surface-subtle));
+      border: 1px solid rgb(var(--line));
+      padding: 18px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    .user-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      margin-bottom: 12px;
+      border: 2px solid rgb(var(--surface));
+      box-shadow: 0 0 0 1px rgb(var(--line));
+    }
+
+    .user-name {
+      font-weight: 700;
+      color: rgb(var(--ink));
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .user-github {
+      font-size: 12px;
+      color: rgb(var(--faint));
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 9px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 150ms ease, opacity 150ms ease, transform 100ms ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+
+    .btn-login {
+      background: rgb(var(--accent));
+      color: rgb(var(--canvas));
+      margin-bottom: 10px;
+    }
+
+    .btn-login:hover:not(:disabled) {
+      background: rgb(var(--ink));
+    }
+
+    .btn-logout {
+      background: transparent;
+      color: rgb(var(--coral));
+      border: 1px solid rgb(var(--line));
+    }
+
+    .btn-logout:hover:not(:disabled) {
+      background: rgb(var(--coral-soft));
+      border-color: rgb(var(--coral-soft));
+    }
+
+    .spinner {
+      display: none;
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: rgb(var(--canvas));
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+    }
+
+    .btn-login.is-loading .spinner {
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .helper-text {
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgb(var(--faint));
+      margin-top: 14px;
+    }
+
+    .helper-text a {
+      color: rgb(var(--accent));
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .helper-text a:hover {
+      text-decoration: underline;
+    }
+
+    .status {
+      text-align: center;
+      padding: 9px 12px;
+      margin-top: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(-2px);
+      transition: opacity 150ms ease, transform 150ms ease;
+    }
+
+    .status[style*="display: block"] {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .status.loading {
+      background: rgb(var(--surface-subtle));
+      color: rgb(var(--muted));
+    }
+
+    .status.error {
+      background: rgb(var(--coral-soft));
+      color: rgb(var(--coral));
+    }
+
+    .status.success {
+      background: rgb(var(--accent-soft));
+      color: rgb(var(--accent));
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12.75 2 4 14.5h6.2L9.3 22 20 9.5h-6.2L12.75 2Z" fill="currentColor" />
+        </svg>
+      </span>
+      <span class="brand-name">Momentum</span>
+    </div>
+    <p class="brand-tagline">Protect your progress</p>
+
+    <div class="login-section active">
+      <button class="btn-login" id="loginBtn">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="btn-label">Login with GitHub</span>
+      </button>
+      <div class="helper-text">
+        Or login on <a href="http://localhost:5173" target="_blank">momentum-sync.com</a> to connect automatically.
+      </div>
+      <div class="status loading" id="status" style="display: none;"></div>
+    </div>
+
+    <div class="user-section">
+      <div class="user-info">
+        <img class="user-avatar" id="userAvatar" alt="User Avatar">
+        <div class="user-name" id="userName"></div>
+        <div class="user-github" id="userGithubId"></div>
+      </div>
+      <div id="syncStatusIndicator" class="status" style="margin-bottom: 14px; display: block;"></div>
+      <button class="btn-logout" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <script src="popup/popup.js"></script>
+</body>
+</html>
