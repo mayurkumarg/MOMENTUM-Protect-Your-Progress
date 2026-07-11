@@ -33,7 +33,7 @@ The extension utilizes a highly reliable MV3 (Manifest V3) Service Worker archit
 4. Click **Load unpacked** and select the `extension` directory.
 
 ### Environment Management
-By default, the unpacked extension uses **Development** endpoints (`http://localhost:5000` and `http://localhost:3000`).
+By default, the unpacked extension uses **Development** endpoints (`http://localhost:5000` for the backend and `http://localhost:5173` for the dashboard).
 
 ## Build Process (Production Release)
 

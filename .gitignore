@@ -30,9 +30,15 @@ build/
 dist-extension/
 /momentum-sync-*.zip
 
+# User-uploaded note attachments (local disk storage)
+backend/uploads/
+
 # OS and editor files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+
+# Local AI-assistant tooling config (not needed by other contributors)
+.claude/
 

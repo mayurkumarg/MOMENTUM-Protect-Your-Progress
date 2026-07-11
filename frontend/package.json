@@ -1,6 +1,9 @@
 {
   "name": "momentum-frontend",
   "version": "1.0.0",
+  "description": "Momentum frontend — React/Vite dashboard for DSA tracking, tasks, analytics, and the AI assistant.",
+  "author": "Mayur Kumar G",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
