@@ -20,6 +20,7 @@ const assertAllowedUpdates = (updates) => {
     'status',
     'priority',
     'category',
+    'companyId',
     'tags',
     'subtasks',
     'addSubtasks',
@@ -42,6 +43,7 @@ const serializeTask = (task) => {
     status: taskObject.status,
     priority: taskObject.priority,
     category: taskObject.category,
+    companyId: taskObject.companyId,
     tags: taskObject.tags,
     progress: taskObject.progress,
     estimatedHours: taskObject.estimatedHours,
@@ -75,6 +77,11 @@ const buildTaskFilters = (userId, query) => {
 
   if (query.category) {
     filters.category = query.category;
+  }
+
+  if (query.companyId) {
+    assertValidObjectId(query.companyId, 'companyId');
+    filters.companyId = query.companyId;
   }
 
   if (query.tags) {
@@ -154,6 +161,7 @@ const createTask = async (userId, data) => {
     status: data.status,
     priority: data.priority,
     category: data.category,
+    companyId: data.companyId,
     tags: data.tags,
     subtasks: data.subtasks,
     reminder: data.reminder,
@@ -297,6 +305,16 @@ const deleteTask = async (userId, taskId) => {
 
   if (!task) {
     throw new AppError('Task not found or unauthorized.', 404);
+  }
+
+  // Best-effort — a notes-cleanup failure should never block the task-delete
+  // response the caller is waiting on. Lazily required to avoid a
+  // module-load-order dependency between task.service.js and notes.service.js.
+  try {
+    const notesService = require('../notes/notes.service');
+    await notesService.deleteAllForEntity(userId, 'TASK', taskId);
+  } catch (cleanupError) {
+    console.error(`[task] failed to clean up notes for deleted task ${taskId}:`, cleanupError.message);
   }
 
   return serializeTask(task);

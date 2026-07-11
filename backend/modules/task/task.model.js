@@ -85,7 +85,13 @@ const taskSchema = new Schema(
       type: Date,
       required: true,
       validate: {
+        // Mongoose re-validates every path on save() by default, not just
+        // modified ones — without the isModified() guard this would also
+        // block saving ANY change (status, title, ...) to a task once its
+        // deadline has passed, since "future" no longer holds. Only enforce
+        // "must be in the future" when the deadline itself is being set.
         validator(value) {
+          if (!this.isModified('deadline')) return true;
           return value instanceof Date && value.getTime() > Date.now();
         },
         message: 'Deadline must be in the future.',
@@ -113,6 +119,14 @@ const taskSchema = new Schema(
       type: String,
       trim: true,
       default: null,
+    },
+    // Optional link to a Placement Tracker company — a task isn't required to
+    // belong to one, and unlinking (set back to null) happens automatically
+    // if the company is deleted (see company.service.js's deleteCompany).
+    companyId: {
+      type: Schema.Types.ObjectId,
+      default: null,
+      index: true,
     },
     tags: {
       type: [
