@@ -71,19 +71,29 @@ const envContent = `/**
 
 fs.writeFileSync(envFilePath, envContent, 'utf8');
 
-// Patch manifest.json for production
+// Patch manifest.json and popup.html for production — replace every
+// dev-only localhost reference, not just the backend host_permissions entry.
 if (env === 'production') {
   console.log('⚙️ Patching manifest.json for production...');
   const manifestPath = path.join(DIST_DIR, 'manifest.json');
   let manifestContent = fs.readFileSync(manifestPath, 'utf8');
-  
-  // Replace backend localhost with production API
-  manifestContent = manifestContent.replace(
-    /"http:\/\/localhost:5000\/\*"/g,
-    `"https://api.momentum-sync.com/*"`
-  );
-  
+
+  manifestContent = manifestContent
+    .replace(/"http:\/\/localhost:5000\/\*"/g, `"https://api.momentum-sync.com/*"`)
+    .replace(/"http:\/\/localhost:5173\/\*"/g, `"https://momentum-sync.com/*"`);
+
   fs.writeFileSync(manifestPath, manifestContent, 'utf8');
+
+  console.log('⚙️ Patching popup.html for production...');
+  const popupPath = path.join(DIST_DIR, 'popup.html');
+  let popupContent = fs.readFileSync(popupPath, 'utf8');
+
+  popupContent = popupContent.replace(
+    /href="http:\/\/localhost:5173"/g,
+    'href="https://momentum-sync.com"'
+  );
+
+  fs.writeFileSync(popupPath, popupContent, 'utf8');
 }
 
 console.log('📦 Creating ZIP archive...');

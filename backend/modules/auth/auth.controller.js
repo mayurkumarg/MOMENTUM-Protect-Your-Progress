@@ -130,13 +130,15 @@ const githubCallback = async (req, res, next) => {
       // new tokens, just bounce back with a success flag.
       if (result.linked) {
         const redirectUrl = `${clientUrl}${callbackPath}${joinParam}github=connected`;
-        console.log(`[AUTH] GitHub repo access linked, redirecting: ${redirectUrl}`);
+        console.log('[AUTH] GitHub repo access linked, redirecting to app');
         return res.redirect(redirectUrl);
       }
 
+      // Never log the redirect URL itself — it carries the access and refresh
+      // tokens as query params.
       const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
       const redirectUrl = `${clientUrl}${callbackPath}${joinParam}${tokenParams}`;
-      console.log(`[AUTH] Redirecting to web: ${redirectUrl}`);
+      console.log('[AUTH] OAuth login success (web), redirecting to app');
       return res.redirect(redirectUrl);
     }
 
@@ -149,7 +151,8 @@ const githubCallback = async (req, res, next) => {
 
     const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
     const extensionRedirect = `https://${extensionId}.chromiumapp.org/?${tokenParams}`;
-    console.log(`[AUTH] Redirecting to extension: ${extensionRedirect}`);
+    // Never log the redirect URL — it carries the access and refresh tokens.
+    console.log('[AUTH] OAuth login success (extension), redirecting');
     return res.redirect(extensionRedirect);
   } catch (error) {
     console.error(`[AUTH] Callback error: ${error.message}`);

@@ -44,13 +44,6 @@ const userSchema = new Schema(
       type: String,
     },
 
-    // Token Management
-    refreshTokens: [{
-      token: String,
-      expiresAt: Date,
-      createdAt: { type: Date, default: Date.now },
-    }],
-
     // Status
     isEmailVerified: {
       type: Boolean,
@@ -67,12 +60,6 @@ const userSchema = new Schema(
   {
     timestamps: true,
   }
-);
-
-// Index for cleanup of expired tokens
-userSchema.index(
-  { 'refreshTokens.expiresAt': 1 },
-  { sparse: true, expireAfterSeconds: 0 }
 );
 
 module.exports = mongoose.model('User', userSchema);

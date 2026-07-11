@@ -118,10 +118,20 @@
         }
 
         const result = await res.json();
-        const newAccessToken = result.data.accessToken;
+        // Backend returns { data: { token, refreshToken } }. Refresh tokens are
+        // single-use (rotated) server-side, so the response also carries a NEW
+        // refresh token — persist BOTH or the next refresh will fail with a
+        // now-invalidated token.
+        const newAccessToken = result.data && result.data.token;
+        const newRefreshToken = result.data && result.data.refreshToken;
+        if (!newAccessToken) {
+          throw new Error('Token refresh response missing token');
+        }
 
-        // Store new access token
-        await storage.setAccessToken(newAccessToken);
+        await storage.setAuthData({
+          accessToken: newAccessToken,
+          ...(newRefreshToken ? { refreshToken: newRefreshToken } : {}),
+        });
         log.info('Access token refreshed successfully');
 
         return newAccessToken;

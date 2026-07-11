@@ -1,5 +1,9 @@
+const crypto = require('crypto');
 const User = require('./user.model');
+const RefreshToken = require('../auth/refreshToken.model');
 const AppError = require('../../utils/AppError');
+
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const serializeUser = (user) => ({
   id: user._id,
@@ -67,35 +71,25 @@ const addRefreshToken = async (userId, token, expiresAt) => {
   const user = await User.findById(userId);
   if (!user) throw new AppError('User not found', 404);
 
-  user.refreshTokens.push({
-    token,
-    expiresAt,
-  });
-
-  await user.save();
+  await RefreshToken.create({ userId, tokenHash: hashToken(token), expiresAt });
 };
 
 const findUserByRefreshToken = async (token) => {
-  const user = await User.findOne({
-    'refreshTokens.token': token,
-    'refreshTokens.expiresAt': { $gt: new Date() },
+  const record = await RefreshToken.findOne({
+    tokenHash: hashToken(token),
+    expiresAt: { $gt: new Date() },
   });
+  if (!record) return null;
 
-  return user;
+  return User.findById(record.userId);
 };
 
 const removeRefreshToken = async (userId, token) => {
-  return User.updateOne(
-    { _id: userId },
-    { $pull: { refreshTokens: { token } } }
-  );
+  return RefreshToken.deleteOne({ userId, tokenHash: hashToken(token) });
 };
 
 const removeAllRefreshTokens = async (userId) => {
-  return User.updateOne(
-    { _id: userId },
-    { $set: { refreshTokens: [] } }
-  );
+  return RefreshToken.deleteMany({ userId });
 };
 
 module.exports = {

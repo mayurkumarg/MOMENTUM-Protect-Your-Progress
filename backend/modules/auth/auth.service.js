@@ -67,7 +67,8 @@ const registerUser = async (email, username, password) => {
   }
 
   // Hash password
-  const passwordHash = await bcrypt.hash(password, 10);
+  const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
+  const passwordHash = await bcrypt.hash(password, bcryptRounds);
 
   // Create user
   const user = await userService.createEmailUser(email, username, passwordHash);
@@ -202,12 +203,19 @@ const refreshAccessToken = async (refreshToken) => {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
-    // Generate new access token
+    // Rotate: retire the used refresh token and issue a new one, so a given
+    // refresh token is single-use — reduces the blast radius of a leaked token.
+    await userService.removeRefreshToken(user._id, refreshToken);
+
     const newAccessToken = signAccessToken(user._id.toString());
+    const newRefreshToken = signRefreshToken(user._id.toString());
+    const newRefreshTokenExpiresAt = new Date();
+    newRefreshTokenExpiresAt.setDate(newRefreshTokenExpiresAt.getDate() + 30);
+    await userService.addRefreshToken(user._id, newRefreshToken, newRefreshTokenExpiresAt);
 
     return {
       token: newAccessToken,
-      refreshToken,
+      refreshToken: newRefreshToken,
     };
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {

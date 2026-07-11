@@ -1,6 +1,7 @@
 const express = require('express');
 const githubController = require('./github.controller');
 const authMiddleware = require('../../middlewares/authMiddleware');
+const { githubWriteLimiter } = require('../../middlewares/rateLimiters');
 
 const router = express.Router();
 
@@ -9,8 +10,8 @@ const router = express.Router();
 // for GET /api/auth/github/connect-url and GET /api/auth/github/callback).
 router.get('/status', authMiddleware, githubController.getStatus);
 router.get('/repos', authMiddleware, githubController.listRepos);
-router.post('/repos', authMiddleware, githubController.createRepo);
-router.post('/repo/select', authMiddleware, githubController.connectRepo);
+router.post('/repos', authMiddleware, githubWriteLimiter, githubController.createRepo);
+router.post('/repo/select', authMiddleware, githubWriteLimiter, githubController.connectRepo);
 router.delete('/disconnect', authMiddleware, githubController.disconnect);
 
 router.get('/activity', authMiddleware, githubController.getActivityDashboard);
