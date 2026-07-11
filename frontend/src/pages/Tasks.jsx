@@ -1,5 +1,6 @@
-import { CheckSquare2, Filter, Inbox, ListChecks, LoaderCircle, Plus, Search, Trash2, X } from 'lucide-react'
+import { CheckSquare2, Filter, Inbox, ListChecks, LoaderCircle, Plus, Search, Sparkles, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 import SubtaskChecklist from '../components/SubtaskChecklist'
@@ -8,10 +9,11 @@ import WorkList from '../components/WorkList'
 import { useToast } from '../components/ToastProvider'
 import { Button, Card, EmptyState, ErrorState, IconButton, Input, LoadingState, PageHeader, Section, SegmentedControl } from '../components/ui'
 import { useTasks } from '../hooks/useTasks'
-import { toDateTimeInputValue } from '../utils/format'
+import { formatDayLabel, toDateTimeInputValue } from '../utils/format'
 import {
   DEFAULT_TASK_FILTERS,
   GROUP_OPTIONS,
+  PRIORITY_DOT,
   PRIORITY_OPTIONS,
   REMINDER_OPTIONS,
   SORT_OPTIONS,
@@ -85,16 +87,18 @@ const emptyTask = {
 }
 
 function TaskForm({ onSubmit, isSaving, onCancel }) {
+  const navigate = useNavigate()
   const [form, setForm] = useState(emptyTask)
   const [tags, setTags] = useState([])
   const [reminderOffset, setReminderOffset] = useState('')
   const [customReminderAt, setCustomReminderAt] = useState('')
+  const [addNoteAfterCreate, setAddNoteAfterCreate] = useState(false)
 
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }))
 
   const submit = async (event) => {
     event.preventDefault()
-    const success = await onSubmit({
+    const created = await onSubmit({
       title: form.title.trim(),
       category: form.category.trim() || null,
       estimatedHours: Number(form.estimatedHours),
@@ -103,11 +107,13 @@ function TaskForm({ onSubmit, isSaving, onCancel }) {
       tags,
       reminder: buildReminderPayload(reminderOffset, customReminderAt),
     })
-    if (success) {
+    if (created) {
       setForm(emptyTask)
       setTags([])
       setReminderOffset('')
       setCustomReminderAt('')
+      if (addNoteAfterCreate) navigate(`/tasks/${created.id}/workspace`)
+      setAddNoteAfterCreate(false)
     }
   }
 
@@ -134,12 +140,23 @@ function TaskForm({ onSubmit, isSaving, onCancel }) {
           setCustomReminderAt={setCustomReminderAt}
           deadline={form.deadline}
         />
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button type="submit" disabled={isSaving || form.title.trim().length < 3}>
-            {isSaving ? <LoaderCircle className="animate-spin" size={16} /> : null}
-            Add task
-          </Button>
+        <div className="flex items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={addNoteAfterCreate}
+              onChange={(event) => setAddNoteAfterCreate(event.target.checked)}
+              className="focus-ring size-4 rounded border-line-strong accent-accent"
+            />
+            Add a note after creating
+          </label>
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+            <Button type="submit" disabled={isSaving || form.title.trim().length < 3}>
+              {isSaving ? <LoaderCircle className="animate-spin" size={16} /> : null}
+              Add task
+            </Button>
+          </div>
         </div>
       </form>
     </Card>
@@ -230,6 +247,8 @@ function FilterChip({ active, onClick, children }) {
   )
 }
 
+const STATUS_DOT = { PENDING: 'bg-faint', IN_PROGRESS: 'bg-yellow', COMPLETED: 'bg-accent' }
+
 const TIMEFRAME_OPTIONS = ['All', 'Today', 'This week', 'Overdue']
 const TIMEFRAME_TO_VALUE = { All: 'all', Today: 'today', 'This week': 'week', Overdue: 'overdue' }
 const VALUE_TO_TIMEFRAME = { all: 'All', today: 'Today', week: 'This week', overdue: 'Overdue' }
@@ -297,6 +316,7 @@ function TaskFilterBar({ filters, onChange, categories, tags }) {
 }
 
 export default function Tasks() {
+  const navigate = useNavigate()
   const [view, setView] = useState('List')
   const [showForm, setShowForm] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -343,16 +363,34 @@ export default function Tasks() {
     { key: 'COMPLETED', label: 'Completed', tasks: sortedTasks.filter((task) => task.status === 'COMPLETED') },
   ]), [sortedTasks])
 
+  // Sidebar snapshot — deliberately computed from the full, unfiltered task
+  // list (not sortedTasks) so an active search/filter never makes these
+  // numbers look misleadingly low (e.g. "0% done" just because completed
+  // tasks happen to be filtered out right now).
+  const snapshot = useMemo(() => {
+    const now = new Date()
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const completed = tasks.filter((task) => task.status === 'COMPLETED')
+    const completedThisWeek = completed.filter((task) => task.completedAt && new Date(task.completedAt) >= sevenDaysAgo).length
+    const completionRate = tasks.length === 0 ? 0 : Math.round((completed.length / tasks.length) * 100)
+    const upcoming = tasks
+      .filter((task) => task.status !== 'COMPLETED' && task.deadline)
+      .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+      .slice(0, 4)
+
+    return { active: tasks.length - completed.length, completedThisWeek, completionRate, upcoming }
+  }, [tasks])
+
   const createTask = async (task) => {
     setIsSaving(true)
     try {
-      await addTask(task)
+      const created = await addTask(task)
       setShowForm(false)
       toast.success('Task created.')
-      return true
+      return created
     } catch (error) {
       toast.error(error.message || 'Could not create task.')
-      return false
+      return null
     } finally {
       setIsSaving(false)
     }
@@ -402,38 +440,62 @@ export default function Tasks() {
     })
   }
 
+  // Promise.allSettled (not Promise.all) so one failing item doesn't block the
+  // rest of the batch — partial success is reported accurately, and only the
+  // items that actually succeeded are cleared from selection, so failed items
+  // stay selected and visible for the user to retry.
   const bulkComplete = async () => {
     setBulkBusy(true)
-    try {
-      await Promise.all([...selectedIds].map((id) => updateTask(id, { status: 'COMPLETED' })))
-      toast.success(`${selectedIds.size} task${selectedIds.size === 1 ? '' : 's'} marked complete.`)
-      setSelectedIds(new Set())
-      setSelectMode(false)
-    } catch (bulkError) {
-      toast.error(bulkError.message || 'Could not update all selected tasks.')
-    } finally {
-      setBulkBusy(false)
+    const ids = [...selectedIds]
+    const results = await Promise.allSettled(ids.map((id) => updateTask(id, { status: 'COMPLETED' })))
+    const succeededIds = ids.filter((_, index) => results[index].status === 'fulfilled')
+    const failedCount = ids.length - succeededIds.length
+
+    if (succeededIds.length > 0) {
+      toast.success(`${succeededIds.length} of ${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`)
     }
+    if (failedCount > 0) {
+      toast.error(`Could not update ${failedCount} task${failedCount === 1 ? '' : 's'}. They remain selected.`)
+    }
+
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      succeededIds.forEach((id) => next.delete(id))
+      return next
+    })
+    if (failedCount === 0) setSelectMode(false)
+    setBulkBusy(false)
   }
 
   const bulkDelete = async () => {
     setBulkBusy(true)
-    try {
-      await Promise.all([...selectedIds].map((id) => removeTask(id)))
-      toast.success(`${selectedIds.size} task${selectedIds.size === 1 ? '' : 's'} deleted.`)
-      setSelectedIds(new Set())
-      setSelectMode(false)
-    } catch (bulkError) {
-      toast.error(bulkError.message || 'Could not delete all selected tasks.')
-    } finally {
-      setBulkBusy(false)
-      setConfirmBulkDelete(false)
+    const ids = [...selectedIds]
+    const results = await Promise.allSettled(ids.map((id) => removeTask(id)))
+    const succeededIds = ids.filter((_, index) => results[index].status === 'fulfilled')
+    const failedCount = ids.length - succeededIds.length
+
+    if (succeededIds.length > 0) {
+      toast.success(`${succeededIds.length} of ${ids.length} task${ids.length === 1 ? '' : 's'} deleted.`)
     }
+    if (failedCount > 0) {
+      toast.error(`Could not delete ${failedCount} task${failedCount === 1 ? '' : 's'}. They remain selected.`)
+    }
+
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      succeededIds.forEach((id) => next.delete(id))
+      return next
+    })
+    if (failedCount === 0) setSelectMode(false)
+    setBulkBusy(false)
+    setConfirmBulkDelete(false)
   }
 
+  const openWorkspace = (task) => navigate(`/tasks/${task.id}/workspace`)
+
   const workListProps = selectMode
-    ? { onDelete: deleteSelectedTask, onEdit: setEditingTask, selectedIds, onToggleSelect: toggleSelectId }
-    : { onToggleComplete: toggleComplete, onDelete: deleteSelectedTask, onEdit: setEditingTask }
+    ? { onDelete: deleteSelectedTask, onEdit: setEditingTask, onOpenWorkspace: openWorkspace, selectedIds, onToggleSelect: toggleSelectId }
+    : { onToggleComplete: toggleComplete, onDelete: deleteSelectedTask, onEdit: setEditingTask, onOpenWorkspace: openWorkspace }
 
   return (
     <div className="space-y-8">
@@ -496,7 +558,7 @@ export default function Tasks() {
           <div className="space-y-7">
             {customGroups.map((group) => (
               <Section key={group.key} title={group.label} description={`${group.tasks.length} task${group.tasks.length === 1 ? '' : 's'}`}>
-                <WorkList items={group.tasks.map(mapTaskToWorkItem)} {...workListProps} />
+                {group.tasks.length ? <WorkList items={group.tasks.map(mapTaskToWorkItem)} {...workListProps} /> : <Card><EmptyState compact icon={Inbox} title="No tasks in this group" description="Tasks will appear here once they match this grouping." /></Card>}
               </Section>
             ))}
           </div>
@@ -520,20 +582,78 @@ export default function Tasks() {
                 </Section>
               )}
             </div>
-            <Card className="h-fit p-5">
-              <p className="eyebrow">Planning principle</p>
-              <p className="mt-4 font-display text-lg font-bold leading-6">Make the next action obvious.</p>
-              <p className="mt-2 text-sm leading-5 text-muted">A good task starts with a verb and is small enough to complete in one focused session.</p>
-            </Card>
+            <div className="space-y-5">
+              <Card className="p-5">
+                <p className="eyebrow">Snapshot</p>
+                <div className="mt-4 flex items-end gap-3">
+                  <span className="font-display text-5xl font-extrabold leading-none text-ink">{snapshot.completionRate}%</span>
+                  <span className="pb-1 text-sm leading-5 text-muted">all-time<br />completion</span>
+                </div>
+                <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
+                  <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${snapshot.completionRate}%` }} />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 text-center">
+                  <div>
+                    <p className="font-display text-lg font-bold text-ink">{snapshot.active}</p>
+                    <p className="text-[11px] text-faint">Active tasks</p>
+                  </div>
+                  <div>
+                    <p className="font-display text-lg font-bold text-ink">{snapshot.completedThisWeek}</p>
+                    <p className="text-[11px] text-faint">Done this week</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="overflow-hidden">
+                <div className="border-b border-line px-4 py-3.5">
+                  <p className="font-display text-[15px] font-bold text-ink">Coming up</p>
+                </div>
+                {snapshot.upcoming.length ? (
+                  <div className="divide-y divide-line">
+                    {snapshot.upcoming.map((task) => (
+                      <button
+                        key={task.id}
+                        type="button"
+                        onClick={() => setEditingTask(task)}
+                        className="focus-ring flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-surface-subtle"
+                      >
+                        <span className={`size-1.5 shrink-0 rounded-full ${PRIORITY_DOT[task.priority] || PRIORITY_DOT.MEDIUM}`} />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-copy">{task.title}</span>
+                        <span className="shrink-0 text-xs text-faint">{formatDayLabel(task.deadline)}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-4 py-6 text-center text-sm text-muted">Nothing else queued.</p>
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <div className="mb-3 grid size-9 place-items-center rounded-md bg-accent-soft text-accent"><Sparkles size={16} /></div>
+                <p className="eyebrow">Planning principle</p>
+                <p className="mt-3 font-display text-lg font-bold leading-6">Make the next action obvious.</p>
+                <p className="mt-2 text-sm leading-5 text-muted">A good task starts with a verb and is small enough to complete in one focused session.</p>
+              </Card>
+            </div>
           </div>
         )
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
           {statusGroups.map((column) => (
-            <Card key={column.key} className="min-h-80 p-4">
-              <p className="mb-4 text-sm font-semibold">{column.label} <span className="text-faint">· {column.tasks.length}</span></p>
-              {column.tasks.length ? <WorkList items={column.tasks.map(mapTaskToWorkItem)} {...workListProps} /> : <EmptyState compact title={`Nothing ${column.label.toLowerCase()}`} description="Tasks will move here as your work takes shape." />}
-            </Card>
+            <div key={column.key} className="flex min-h-80 flex-col rounded-xl border border-line bg-surface-subtle/60 p-3">
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <span className={`size-2 shrink-0 rounded-full ${STATUS_DOT[column.key]}`} />
+                <p className="text-sm font-semibold text-copy">{column.label}</p>
+                <span className="ml-auto rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-faint">{column.tasks.length}</span>
+              </div>
+              {column.tasks.length ? (
+                <WorkList variant="board" items={column.tasks.map(mapTaskToWorkItem)} {...workListProps} />
+              ) : (
+                <div className="flex flex-1 items-center justify-center">
+                  <EmptyState compact title={`Nothing ${column.label.toLowerCase()}`} description="Tasks will move here as your work takes shape." />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

@@ -94,7 +94,7 @@ export default function LoginPage() {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="you@example.com"
-                className={`w-full rounded-lg border border-line bg-canvas pl-10 pr-3 py-2.5 text-sm placeholder-muted transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+                className={`focus-ring w-full rounded-md border border-line bg-canvas pl-10 pr-3 py-2.5 text-sm placeholder-muted transition-colors hover:border-line-strong ${
                   errors.email ? 'border-coral' : ''
                 }`}
               />
@@ -114,13 +114,14 @@ export default function LoginPage() {
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Enter your password"
-                className={`w-full rounded-lg border border-line bg-canvas px-3 py-2.5 pr-10 text-sm placeholder-muted transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+                className={`focus-ring w-full rounded-md border border-line bg-canvas px-3 py-2.5 pr-10 text-sm placeholder-muted transition-colors hover:border-line-strong ${
                   errors.password ? 'border-coral' : ''
                 }`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 className="absolute right-3 top-3 text-muted hover:text-ink transition-colors"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}

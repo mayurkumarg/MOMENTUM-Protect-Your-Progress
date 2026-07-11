@@ -22,7 +22,7 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     document.documentElement.style.colorScheme = theme
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#141917' : '#f0f1ec')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#121715' : '#ebede6')
   }, [theme])
 
   const setTheme = (value) => {

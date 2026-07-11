@@ -6,6 +6,7 @@ export function Button({ children, icon: Icon, variant = 'primary', className = 
     secondary: 'border border-line bg-surface text-copy hover:border-line-strong hover:bg-surface-subtle',
     ghost: 'text-muted hover:bg-surface-subtle hover:text-ink',
     danger: 'bg-coral text-white shadow-sm hover:bg-coral/90 hover:shadow-md',
+    accent: 'bg-accent text-white shadow-sm hover:bg-accent/90 hover:shadow-md',
   }
   return (
     <button className={`focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md px-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100 disabled:opacity-60 ${variants[variant]} ${className}`} {...props}>
@@ -15,26 +16,26 @@ export function Button({ children, icon: Icon, variant = 'primary', className = 
   )
 }
 
-export function IconButton({ icon: Icon, label, className = '', ...props }) {
+export function IconButton({ icon: Icon, label, className = '', iconProps = {}, ...props }) {
   return (
     <button aria-label={label} title={label} className={`focus-ring inline-grid size-10 place-items-center rounded-md text-muted transition-all duration-150 hover:bg-surface-subtle hover:text-ink active:scale-[0.94] ${className}`} {...props}>
-      <Icon size={18} />
+      <Icon size={18} {...iconProps} />
     </button>
   )
 }
 
-export function Card({ children, className = '' }) {
-  return <section className={`surface min-w-0 rounded-lg transition-shadow duration-200 ${className}`}>{children}</section>
+export function Card({ children, className = '', hover = false }) {
+  return <section className={`surface min-w-0 rounded-xl ${hover ? 'lift' : 'transition-shadow duration-200'} ${className}`}>{children}</section>
 }
 
 export function Badge({ children, tone = 'neutral' }) {
   const tones = {
-    neutral: 'bg-surface-subtle text-muted',
-    green: 'bg-accent-soft text-accent',
-    coral: 'bg-coral-soft text-coral',
-    yellow: 'bg-yellow-soft text-yellow',
+    neutral: 'bg-surface-subtle text-muted ring-line',
+    green: 'bg-accent-soft text-accent ring-accent/15',
+    coral: 'bg-coral-soft text-coral ring-coral/15',
+    yellow: 'bg-yellow-soft text-yellow ring-yellow/15',
   }
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide ${tones[tone]}`}>{children}</span>
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide ring-1 ring-inset ${tones[tone]}`}>{children}</span>
 }
 
 export function PageHeader({ eyebrow, title, description, actions }) {
@@ -69,9 +70,9 @@ export function Section({ title, description, action, children, className = '' }
 
 export function EmptyState({ icon: Icon = Plus, title, description, action, compact = false }) {
   return (
-    <div className={`flex flex-col items-center justify-center px-5 text-center ${compact ? 'min-h-44 py-8' : 'min-h-64 py-12'}`}>
-      <div className="mb-4 grid size-11 place-items-center rounded-lg border border-line bg-surface-subtle text-muted">
-        <Icon size={19} />
+    <div className={`animate-fade-in flex flex-col items-center justify-center px-5 text-center ${compact ? 'min-h-44 py-8' : 'min-h-64 py-12'}`}>
+      <div className="mb-4 grid size-12 place-items-center rounded-xl border border-line bg-surface-subtle text-muted shadow-[var(--shadow-sm)]">
+        <Icon size={20} />
       </div>
       <h3 className="font-display text-[15px] font-bold text-ink">{title}</h3>
       <p className="mt-1.5 max-w-sm text-sm leading-5 text-muted">{description}</p>
@@ -81,13 +82,13 @@ export function EmptyState({ icon: Icon = Plus, title, description, action, comp
 }
 
 export function Skeleton({ className = '' }) {
-  return <div className={`animate-pulse rounded-md bg-surface-subtle ${className}`} />
+  return <div className={`animate-pulse rounded-lg bg-surface-subtle ${className}`} />
 }
 
 export function LoadingState({ label = 'Preparing your workspace' }) {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center text-muted">
-      <LoaderCircle className="mb-3 animate-spin" size={20} />
+    <div className="animate-fade-in flex min-h-48 flex-col items-center justify-center text-muted">
+      <LoaderCircle className="mb-3 animate-spin text-accent" size={22} />
       <p className="text-sm">{label}</p>
     </div>
   )
@@ -95,9 +96,9 @@ export function LoadingState({ label = 'Preparing your workspace' }) {
 
 export function ErrorState({ icon: Icon = AlertTriangle, title = 'Something went wrong', description, action }) {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center px-5 text-center">
-      <div className="mb-4 grid size-11 place-items-center rounded-lg border border-coral/20 bg-coral-soft text-coral">
-        <Icon size={19} />
+    <div className="animate-fade-in flex min-h-48 flex-col items-center justify-center px-5 text-center">
+      <div className="mb-4 grid size-12 place-items-center rounded-xl border border-coral/20 bg-coral-soft text-coral shadow-[var(--shadow-sm)]">
+        <Icon size={20} />
       </div>
       <h3 className="font-display text-[15px] font-bold text-ink">{title}</h3>
       <p className="mt-1.5 max-w-sm text-sm leading-5 text-muted">{description || 'Momentum could not load this data.'}</p>

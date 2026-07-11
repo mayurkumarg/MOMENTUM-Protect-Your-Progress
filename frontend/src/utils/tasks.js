@@ -13,6 +13,7 @@ export const PRIORITY_OPTIONS = [
 ]
 
 export const PRIORITY_TONE = { LOW: 'neutral', MEDIUM: 'yellow', HIGH: 'coral' }
+export const PRIORITY_DOT = { LOW: 'bg-faint', MEDIUM: 'bg-yellow', HIGH: 'bg-coral' }
 const PRIORITY_WEIGHT = { HIGH: 0, MEDIUM: 1, LOW: 2 }
 
 export const SORT_OPTIONS = [
