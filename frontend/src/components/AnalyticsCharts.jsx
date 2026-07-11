@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, CheckCircle2, CircleDashed, Clock, Code2, Flame, Github, ListChecks, TriangleAlert } from 'lucide-react'
-import { Badge, Card } from './ui'
+import { Activity, ArrowDown, ArrowUp, BarChart3, Briefcase, CheckCircle2, CircleDashed, Clock, Code2, Flame, Github, ListChecks, TrendingUp, TriangleAlert } from 'lucide-react'
+import { Badge, Card, EmptyState } from './ui'
 import { formatActivityDuration } from '../utils/format'
 
 export function StatTile({ label, value, delta, deltaLabel }) {
@@ -8,19 +8,19 @@ export function StatTile({ label, value, delta, deltaLabel }) {
   const isNegative = hasDelta && delta < 0
 
   return (
-    <Card className="p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <p className="text-xs font-semibold uppercase tracking-wide text-faint">{label}</p>
+    <Card hover className="p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{label}</p>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="font-display text-3xl font-extrabold text-ink">{value}</span>
+        <span className="font-display text-[30px] font-extrabold leading-none text-ink">{value}</span>
         {hasDelta && (
-          <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${isPositive ? 'text-accent' : isNegative ? 'text-coral' : 'text-faint'}`}>
-            {isPositive && <ArrowUp size={12} />}
-            {isNegative && <ArrowDown size={12} />}
+          <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${isPositive ? 'bg-accent-soft text-accent' : isNegative ? 'bg-coral-soft text-coral' : 'text-faint'}`}>
+            {isPositive && <ArrowUp size={11} />}
+            {isNegative && <ArrowDown size={11} />}
             {Math.abs(delta)}%
           </span>
         )}
       </div>
-      {deltaLabel && <p className="mt-1.5 text-xs leading-4 text-faint">{deltaLabel}</p>}
+      {deltaLabel && <p className="mt-2 text-xs leading-4 text-faint">{deltaLabel}</p>}
     </Card>
   )
 }
@@ -32,7 +32,7 @@ export function HeroStat({ icon: Icon, tone, value, label, sublabel }) {
     muted: 'bg-surface-subtle text-muted',
   }
   return (
-    <div className="min-w-0 rounded-lg border border-line bg-surface p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm sm:p-4">
+    <div className="lift min-w-0 rounded-lg border border-line bg-surface p-3.5 sm:p-4">
       <div className={`grid size-8 place-items-center rounded-md ${toneClasses[tone]}`}><Icon size={15} /></div>
       <p className="mt-2.5 truncate font-display text-xl font-bold text-ink">{value}</p>
       <p className="text-xs text-faint">{label}</p>
@@ -46,7 +46,7 @@ export function TodayHeroCard({ problemsSolvedToday, tasksCompletedToday, timeTo
   const hasActivity = problemsSolvedToday > 0 || tasksCompletedToday > 0
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden bg-gradient-to-br from-transparent via-transparent to-accent-soft/40">
       <div className="grid gap-6 p-6 sm:p-7 lg:grid-cols-[auto_1fr] lg:items-center lg:gap-10">
         <div className="min-w-0">
           <p className="eyebrow mb-2">Today</p>
@@ -83,7 +83,9 @@ function levelForCount(count, maxCount) {
 }
 
 export function ActivityHeatmap({ heatmap }) {
-  if (!heatmap || heatmap.length === 0) return null
+  if (!heatmap || heatmap.length === 0) {
+    return <Card><EmptyState compact icon={Activity} title="No activity yet" description="Solved problems will start filling in this heatmap." /></Card>
+  }
 
   const weeks = []
   for (let i = 0; i < heatmap.length; i += 7) {
@@ -95,7 +97,7 @@ export function ActivityHeatmap({ heatmap }) {
   const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', '']
 
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-5">
       <p className="mb-4 text-sm text-muted"><span className="font-semibold text-ink">{activeDays}</span> active {activeDays === 1 ? 'day' : 'days'} in the last 14 weeks</p>
       <div className="overflow-x-auto">
         <div className="flex w-max gap-3">
@@ -111,7 +113,7 @@ export function ActivityHeatmap({ heatmap }) {
                   <div
                     key={day.date}
                     title={`${day.date}: ${day.count} ${day.count === 1 ? 'activity' : 'activities'}`}
-                    className={`size-[15px] rounded-[4px] transition-transform duration-150 hover:scale-125 ${LEVEL_CLASSES[levelForCount(day.count, maxCount)]}`}
+                    className={`size-[15px] rounded transition-transform duration-150 hover:scale-125 ${LEVEL_CLASSES[levelForCount(day.count, maxCount)]}`}
                   />
                 ))}
               </div>
@@ -121,7 +123,7 @@ export function ActivityHeatmap({ heatmap }) {
       </div>
       <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-faint">
         <span>Less</span>
-        {LEVEL_CLASSES.map((cls, index) => <div key={index} className={`size-[11px] rounded-[3px] ${cls}`} />)}
+        {LEVEL_CLASSES.map((cls, index) => <div key={index} className={`size-[11px] rounded-sm ${cls}`} />)}
         <span>More</span>
       </div>
     </Card>
@@ -139,34 +141,34 @@ export function DifficultyBreakdown({ difficultyCounts }) {
   ]
   const total = entries.reduce((sum, [, count]) => sum + count, 0)
 
+  if (total === 0) {
+    return <Card><EmptyState compact icon={BarChart3} title="No problems solved today" description="A difficulty breakdown will appear once you log a solve." /></Card>
+  }
+
   return (
     <Card className="p-5">
-      {total === 0 ? (
-        <p className="text-sm text-muted">No problems solved yet today.</p>
-      ) : (
-        <>
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-subtle">
-            {entries.map(([difficulty, count]) => count > 0 && (
-              <div key={difficulty} className={`h-full ${DIFFICULTY_FILL[difficulty]}`} style={{ width: `${(count / total) * 100}%` }} />
-            ))}
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-subtle">
+        {entries.map(([difficulty, count]) => count > 0 && (
+          <div key={difficulty} className={`h-full ${DIFFICULTY_FILL[difficulty]}`} style={{ width: `${(count / total) * 100}%` }} />
+        ))}
+      </div>
+      <div className="mt-4 space-y-2.5">
+        {entries.map(([difficulty, count]) => (
+          <div key={difficulty} className="flex items-center gap-2.5 text-sm">
+            <span className={`size-2 shrink-0 rounded-full ${DIFFICULTY_FILL[difficulty]}`} />
+            <span className="flex-1 text-copy">{difficulty}</span>
+            <span className={`font-semibold ${DIFFICULTY_TEXT[difficulty]}`}>{count}</span>
           </div>
-          <div className="mt-4 space-y-2.5">
-            {entries.map(([difficulty, count]) => (
-              <div key={difficulty} className="flex items-center gap-2.5 text-sm">
-                <span className={`size-2 shrink-0 rounded-full ${DIFFICULTY_FILL[difficulty]}`} />
-                <span className="flex-1 text-copy">{difficulty}</span>
-                <span className={`font-semibold ${DIFFICULTY_TEXT[difficulty]}`}>{count}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+        ))}
+      </div>
     </Card>
   )
 }
 
 export function PlatformBreakdownBars({ platformBreakdown }) {
-  if (!platformBreakdown || platformBreakdown.length === 0) return null
+  if (!platformBreakdown || platformBreakdown.length === 0) {
+    return <Card><EmptyState compact icon={Code2} title="No platform activity yet" description="Solved problems from a connected platform will show up here." /></Card>
+  }
 
   const maxCount = Math.max(...platformBreakdown.map((entry) => entry.count))
 
@@ -228,11 +230,7 @@ export function TaskCompletionRing({ taskCompletion }) {
   const { completed, pending, overdue, total, completionRate } = taskCompletion
 
   if (total === 0) {
-    return (
-      <Card className="flex min-h-40 items-center justify-center p-5 text-center">
-        <p className="text-sm text-muted">No tasks yet — add one to see your completion rate here.</p>
-      </Card>
-    )
+    return <Card><EmptyState compact icon={ListChecks} title="No tasks yet" description="Add a task to see your completion rate here." /></Card>
   }
 
   const stats = [
@@ -263,7 +261,9 @@ export function TaskCompletionRing({ taskCompletion }) {
 // the last 8 as bars — enough to see whether effort is trending up or down
 // without a second full heatmap.
 export function ProductivityTrend({ heatmap }) {
-  if (!heatmap || heatmap.length === 0) return null
+  if (!heatmap || heatmap.length === 0) {
+    return <Card><EmptyState compact icon={TrendingUp} title="No trend yet" description="Weekly totals will appear here once you start logging activity." /></Card>
+  }
 
   const weeks = []
   for (let i = 0; i < heatmap.length; i += 7) {
@@ -276,7 +276,7 @@ export function ProductivityTrend({ heatmap }) {
   const maxTotal = Math.max(1, ...recentWeeks.map((week) => week.total))
 
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-5">
       <div className="flex h-28 items-end gap-2.5">
         {recentWeeks.map((week, index) => {
           const isLast = index === recentWeeks.length - 1
@@ -301,11 +301,7 @@ export function ProductivityTrend({ heatmap }) {
 
 export function RecentActivityList({ recent }) {
   if (!recent || recent.length === 0) {
-    return (
-      <Card className="p-5">
-        <p className="text-sm text-muted">Nothing solved yet today — your recent solves will show up here.</p>
-      </Card>
-    )
+    return <Card><EmptyState compact icon={Code2} title="Nothing solved today" description="Your recent solves will show up here." /></Card>
   }
 
   return (
@@ -327,14 +323,14 @@ export function RecentActivityList({ recent }) {
   )
 }
 
-// Small teaser pointing at the full /github dashboard. Connects inline (no
-// detour through Settings) when not yet connected — `onConnect` is expected
-// to be wired to useGithubConnect by the page rendering this, `onView` to a
-// simple navigate('/github'). Kept presentational otherwise, matching the
-// rest of this file.
+// Small teaser pointing at the full /journal (Coding Journal) dashboard.
+// Connects inline (no detour through Settings) when not yet connected —
+// `onConnect` is expected to be wired to useGithubConnect by the page
+// rendering this, `onView` to a simple navigate('/journal'). Kept
+// presentational otherwise, matching the rest of this file.
 // Folds real sync numbers in when available (stats), so this reads as part
 // of the same productivity picture instead of a bare "connected" badge — the
-// full breakdown still lives on /github, this is the at-a-glance summary.
+// full breakdown still lives on /journal, this is the at-a-glance summary.
 export function GithubActivityTeaser({ connected, repositoryName, connecting, stats, onConnect, onView }) {
   return (
     <Card className="flex h-full flex-col items-start gap-3 p-5">
@@ -343,7 +339,7 @@ export function GithubActivityTeaser({ connected, repositoryName, connecting, st
         <Badge tone={connected ? 'green' : 'neutral'}>{connected ? 'Connected' : 'Not connected'}</Badge>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-display text-[15px] font-bold text-ink">GitHub activity</p>
+        <p className="font-display text-[15px] font-bold text-ink">Coding journal</p>
         <p className="mt-1.5 text-sm leading-5 text-muted">
           {connected ? `Syncing solved problems to ${repositoryName}.` : 'Connect GitHub to build an automatic coding journal from solved problems.'}
         </p>
@@ -361,7 +357,44 @@ export function GithubActivityTeaser({ connected, repositoryName, connecting, st
         </div>
       )}
       <button onClick={connected ? onView : onConnect} disabled={connecting} className="focus-ring text-xs font-semibold text-accent hover:underline disabled:opacity-60">
-        {connected ? 'View GitHub activity' : connecting ? 'Redirecting to GitHub...' : 'Connect GitHub'} →
+        {connected ? 'View coding journal' : connecting ? 'Redirecting to GitHub...' : 'Connect GitHub'} →
+      </button>
+    </Card>
+  )
+}
+
+// Small teaser pointing at the full /placements Placement Tracker — same
+// compact shape as GithubActivityTeaser above, so Analytics reads as one
+// consistent set of "quick look, then go deeper" cards.
+export function PlacementTeaser({ stats, onView }) {
+  const hasCompanies = Boolean(stats && stats.total > 0)
+
+  return (
+    <Card className="flex h-full flex-col items-start gap-3 p-5">
+      <div className="flex w-full items-start justify-between gap-2">
+        <div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Briefcase size={17} /></div>
+        {hasCompanies && <Badge tone="neutral">{stats.total} tracked</Badge>}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[15px] font-bold text-ink">Placements</p>
+        <p className="mt-1.5 text-sm leading-5 text-muted">
+          {hasCompanies ? 'Companies, prep tasks, and interview notes in one tracker.' : 'Track companies, prep tasks, and interview notes in one place.'}
+        </p>
+      </div>
+      {hasCompanies && (
+        <div className="grid w-full grid-cols-2 gap-3 border-t border-line pt-3">
+          <div>
+            <p className="font-display text-lg font-bold text-ink">{stats.applied}</p>
+            <p className="text-[11px] text-faint">Active applications</p>
+          </div>
+          <div>
+            <p className="font-display text-lg font-bold text-ink">{stats.upcomingInterviews + stats.upcomingOAs}</p>
+            <p className="text-[11px] text-faint">Upcoming rounds</p>
+          </div>
+        </div>
+      )}
+      <button onClick={onView} className="focus-ring text-xs font-semibold text-accent hover:underline">
+        {hasCompanies ? 'View Placement Tracker' : 'Start tracking placements'} →
       </button>
     </Card>
   )

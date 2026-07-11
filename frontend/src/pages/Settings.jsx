@@ -90,7 +90,7 @@ export default function Settings() {
               </SettingRow>
             </Card>
           </Section>
-          <Section title="GitHub" description="Connect a repository so Momentum can track your DSA journal on GitHub.">
+          <Section title="Coding Journal" description="Connect a repository so Momentum can track your DSA journal on GitHub.">
             <GithubIntegrationPanel />
           </Section>
         </div>

@@ -1,20 +1,33 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, BarChart3, CheckSquare2, CircleHelp, Github, LayoutGrid, Menu, MessageCircle, Plus, Settings, X } from 'lucide-react'
+import { Activity, BarChart3, Briefcase, CalendarDays, CheckSquare2, CircleHelp, LayoutGrid, Menu, MessageCircle, NotebookText, Plus, Settings, X } from 'lucide-react'
 import { Button, IconButton } from '../ui'
 import { Logo } from '../Logo'
 import ThemeToggle from '../ThemeToggle'
 import ProfileMenu from './ProfileMenu'
 import { useTaskReminders } from '../../hooks/useTaskReminders'
 
-const mainNav = [
+// The core loop — automatic activity capture, analytics, the coding journal,
+// and the AI coach — is Momentum's actual identity, so it leads the nav and
+// fills the mobile tab bar. Tasks, Calendar, and Placements are real,
+// supported planning features, just not what makes Momentum different from
+// a to-do list.
+const coreNav = [
   { to: '/overview', label: 'Overview', icon: LayoutGrid },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare2 },
   { to: '/activity', label: 'Activity', icon: Activity },
+  { to: '/journal', label: 'Coding Journal', icon: NotebookText },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/assistant', label: 'Assistant', icon: MessageCircle },
-  { to: '/github', label: 'GitHub', icon: Github },
 ]
+const planNav = [
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare2 },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/placements', label: 'Placements', icon: Briefcase },
+]
+const mainNav = [...coreNav, ...planNav]
+// Bottom tab bar on mobile only has room for 4 slots — these are the ones a
+// first-time user's thumb should land on first.
+const mobileTabNav = [coreNav[0], coreNav[1], coreNav[3], coreNav[4]]
 
 function Brand() {
   return (
@@ -39,9 +52,14 @@ function Sidebar({ onNavigate }) {
   return (
     <div className="flex h-full flex-col px-4 py-5">
       <div className="px-2"><Brand /></div>
-      <nav className="mt-9 space-y-1">
-        <p className="eyebrow mb-3 px-3">Workspace</p>
-        {mainNav.map((item) => <NavItem item={item} key={item.to} onClick={onNavigate} />)}
+      <nav className="mt-9 space-y-5">
+        <div className="space-y-1">
+          {coreNav.map((item) => <NavItem item={item} key={item.to} onClick={onNavigate} />)}
+        </div>
+        <div className="space-y-1">
+          <p className="eyebrow mb-3 px-3">Plan</p>
+          {planNav.map((item) => <NavItem item={item} key={item.to} onClick={onNavigate} />)}
+        </div>
       </nav>
       <div className="mt-auto space-y-1 border-t border-line pt-4">
         <NavItem item={{ to: '/settings', label: 'Settings', icon: Settings }} onClick={onNavigate} />
@@ -102,7 +120,7 @@ export default function AppShell() {
         </div>
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-sidebar/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur lg:hidden">
-        {mainNav.slice(0, 4).map((item) => {
+        {mobileTabNav.map((item) => {
           const Icon = item.icon
           return <NavLink key={item.to} to={item.to} className={({ isActive }) => `focus-ring flex flex-col items-center gap-1 rounded-md py-1.5 text-[10px] font-semibold ${isActive ? 'text-accent' : 'text-muted'}`}><Icon size={18} />{item.label}</NavLink>
         })}

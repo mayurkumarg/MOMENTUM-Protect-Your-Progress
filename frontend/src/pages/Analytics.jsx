@@ -4,6 +4,7 @@ import {
   ActivityHeatmap,
   DifficultyBreakdown,
   GithubActivityTeaser,
+  PlacementTeaser,
   PlatformBreakdownBars,
   ProductivityTrend,
   RecentActivityList,
@@ -12,13 +13,15 @@ import {
   TodayHeroCard,
 } from '../components/AnalyticsCharts'
 import { useToast } from '../components/ToastProvider'
-import { Button, Card, EmptyState, ErrorState, PageHeader, Section, Skeleton } from '../components/ui'
+import { Button, Card, ErrorState, PageHeader, Section, Skeleton } from '../components/ui'
 import { useAnalyticsSummary } from '../hooks/useAnalyticsSummary'
+import { useCompanies } from '../hooks/useCompanies'
 import { useDsaSummary } from '../hooks/useDsaSummary'
 import { useGithubActivity } from '../hooks/useGithubActivity'
 import { useGithubConnect } from '../hooks/useGithubConnect'
 import { useGithubOAuthReturn } from '../hooks/useGithubOAuthReturn'
 import { useTasks } from '../hooks/useTasks'
+import { computePlacementStats } from '../utils/companies'
 import { formatDurationHuman } from '../utils/format'
 
 function AnalyticsSkeleton() {
@@ -53,6 +56,8 @@ export default function Analytics() {
   const github = useGithubActivity()
   const githubConnect = useGithubConnect('/analytics')
   useGithubOAuthReturn(github.refetch)
+  const companiesQuery = useCompanies()
+  const placementStats = useMemo(() => computePlacementStats(companiesQuery.companies), [companiesQuery.companies])
 
   const tasksCompletedToday = useMemo(() => {
     const todayKey = new Date().toDateString()
@@ -119,26 +124,28 @@ export default function Analytics() {
               <DifficultyBreakdown difficultyCounts={dsaSummary?.difficultyCounts} />
             </Section>
             <Section title="Platforms" description="Last 14 weeks.">
-              {summary.platformBreakdown.length ? (
-                <PlatformBreakdownBars platformBreakdown={summary.platformBreakdown} />
-              ) : (
-                <Card><EmptyState compact title="No platform activity yet" description="Solved problems from a connected platform will show up here." /></Card>
-              )}
+              <PlatformBreakdownBars platformBreakdown={summary.platformBreakdown} />
             </Section>
-            <Section title="GitHub">
+            <Section title="Coding Journal">
               <GithubActivityTeaser
                 connected={Boolean(github.dashboard?.repository)}
                 repositoryName={github.dashboard?.repository?.fullName}
                 connecting={githubConnect.connecting}
                 stats={github.dashboard?.repository ? { synced: github.dashboard.stats.synced, currentStreak: github.dashboard.consistency.currentStreak } : null}
                 onConnect={githubConnect.connect}
-                onView={() => navigate('/github')}
+                onView={() => navigate('/journal')}
               />
             </Section>
           </div>
 
           <Section title="Recent activity" description="Today's solves, most recent first.">
             <RecentActivityList recent={dsaSummary?.recent} />
+          </Section>
+
+          <Section title="Placements">
+            <div className="max-w-sm">
+              <PlacementTeaser stats={placementStats} onView={() => navigate('/placements')} />
+            </div>
           </Section>
         </div>
       )}

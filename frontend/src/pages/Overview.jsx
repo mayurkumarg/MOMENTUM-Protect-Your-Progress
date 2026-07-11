@@ -1,15 +1,24 @@
-import { ArrowRight, CheckSquare2, Code2, GitBranch, Plus, Sparkles } from 'lucide-react'
+import { Activity as ActivityIcon, ArrowRight, CheckSquare2, Code2, Download, GitBranch, MessageCircle, NotebookText, Plus, Sparkles } from 'lucide-react'
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import WorkList from '../components/WorkList'
+import { TodayHeroCard } from '../components/AnalyticsCharts'
 import { WorkloadStatusCard } from '../components/WorkloadStatus'
 import { useToast } from '../components/ToastProvider'
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section } from '../components/ui'
+import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section, Skeleton } from '../components/ui'
 import { useActivities } from '../hooks/useActivities'
+import { useAnalyticsSummary } from '../hooks/useAnalyticsSummary'
+import { useDsaSummary } from '../hooks/useDsaSummary'
 import { useTasks } from '../hooks/useTasks'
 import { useWorkload } from '../hooks/useWorkload'
-import { formatActivityDuration, formatDateTime, getGreeting } from '../utils/format'
+import { formatActivityDuration, formatDateTime, formatDurationHuman, getGreeting } from '../utils/format'
 import { mapTaskToWorkItem, splitTasks } from '../utils/tasks'
+
+const CONTINUE_LINKS = [
+  { to: '/activity', label: 'Activity', description: 'Your latest tracked practice', icon: ActivityIcon },
+  { to: '/journal', label: 'Coding Journal', description: 'Auto-synced solves on GitHub', icon: NotebookText },
+  { to: '/assistant', label: 'Assistant', description: 'Ask about your progress', icon: MessageCircle },
+]
 
 function ActivityPreview({ activities }) {
   if (!activities.length) {
@@ -22,7 +31,7 @@ function ActivityPreview({ activities }) {
         const duration = formatActivityDuration(activity)
         return (
           <div key={activity.id} className="flex min-w-0 items-center gap-3 px-4 py-3.5 sm:px-5">
-            <div className="grid size-9 shrink-0 place-items-center rounded-md bg-accent-soft text-accent"><Code2 size={16} /></div>
+            <div className="grid size-9 shrink-0 place-items-center rounded-md bg-accent-soft text-accent"><Code2 size={17} /></div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-copy">{activity.title}</p>
               <p className="mt-0.5 truncate text-xs text-faint">{activity.metadata?.platform || activity.source} · {formatDateTime(activity.activityDate)}</p>
@@ -41,6 +50,8 @@ export default function Overview() {
   const tasksQuery = useTasks()
   const activityQuery = useActivities()
   const workloadQuery = useWorkload()
+  const analyticsQuery = useAnalyticsSummary()
+  const dsaQuery = useDsaSummary()
 
   const groups = useMemo(() => splitTasks(tasksQuery.tasks), [tasksQuery.tasks])
   const focusNext = groups.today[0] || groups.upcoming[0] || null
@@ -49,6 +60,14 @@ export default function Overview() {
   const isLoading = tasksQuery.isLoading || activityQuery.isLoading
   const error = tasksQuery.error || activityQuery.error
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())
+  const isFirstTimeUser = !activityQuery.isLoading && activityQuery.activities.length === 0
+
+  const tasksCompletedToday = useMemo(() => {
+    const todayKey = new Date().toDateString()
+    return tasksQuery.tasks.filter(
+      (task) => task.status === 'COMPLETED' && task.completedAt && new Date(task.completedAt).toDateString() === todayKey
+    ).length
+  }, [tasksQuery.tasks])
 
   const handleRetry = () => {
     Promise.all([tasksQuery.refetch(), activityQuery.refetch()]).catch((retryError) => {
@@ -59,6 +78,44 @@ export default function Overview() {
   return (
     <div className="space-y-8">
       <PageHeader eyebrow={dateLabel} title={getGreeting()} description="A calm view of what deserves your attention next." actions={<Button icon={Plus} onClick={() => navigate('/tasks')}>Add task</Button>} />
+
+      {isFirstTimeUser ? (
+        <Card className="overflow-hidden border-accent/30 bg-accent-soft/40">
+          <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="eyebrow mb-2">Get started</p>
+              <p className="font-display text-lg font-bold text-ink">Momentum tracks your DSA practice automatically</p>
+              <p className="mt-1.5 max-w-md text-sm leading-5 text-muted">Install the browser extension once, and every problem you solve on LeetCode, Codeforces, and more shows up here — no manual logging.</p>
+            </div>
+            <Button icon={Download} className="shrink-0" onClick={() => navigate('/install')}>Install extension</Button>
+          </div>
+        </Card>
+      ) : analyticsQuery.isLoading || dsaQuery.isLoading ? (
+        <Skeleton className="h-44 w-full" />
+      ) : analyticsQuery.summary ? (
+        <TodayHeroCard
+          problemsSolvedToday={dsaQuery.summary?.problemsSolvedToday || 0}
+          tasksCompletedToday={tasksCompletedToday}
+          timeTodayLabel={formatDurationHuman((dsaQuery.summary?.totalMinutesToday || 0) * 60) || '0m'}
+          streakCurrent={analyticsQuery.summary.streak.current}
+          streakLongest={analyticsQuery.summary.streak.longest}
+        />
+      ) : null}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {CONTINUE_LINKS.map(({ to, label, description, icon: Icon }) => (
+          <NavLink key={to} to={to} className="focus-ring block rounded-xl">
+            <Card hover className="flex items-start gap-3 p-4">
+              <div className="grid size-9 shrink-0 place-items-center rounded-md bg-accent-soft text-accent"><Icon size={17} /></div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-copy">{label}</p>
+                <p className="mt-0.5 text-xs text-faint">{description}</p>
+              </div>
+            </Card>
+          </NavLink>
+        ))}
+      </div>
+
       {isLoading ? (
         <Card><LoadingState label="Loading your workspace" /></Card>
       ) : error ? (
@@ -84,9 +141,8 @@ export default function Overview() {
                 <span className="font-display text-5xl font-extrabold text-ink">{groups.today.length}</span>
                 <span className="pb-1 text-sm leading-5 text-muted">pending tasks<br />due today</span>
               </div>
-              <p className="mt-4 text-xs leading-5 text-faint">{activityQuery.activities.length} activity records are available from the backend.</p>
             </Card>
-            <Card className="overflow-hidden">
+            <Card hover className="overflow-hidden">
               <div className="border-b border-line bg-accent-soft p-5">
                 <div className="mb-6 grid size-9 place-items-center rounded-md bg-surface text-accent"><Sparkles size={17} /></div>
                 <p className="font-display text-lg font-bold text-ink">Focus Next</p>
@@ -101,10 +157,9 @@ export default function Overview() {
               </div>
               <div className="p-3"><Button variant="ghost" className="w-full justify-between" onClick={() => navigate('/tasks')}>Open tasks <ArrowRight size={15} /></Button></div>
             </Card>
-            <Card className="flex items-center gap-3 p-4">
+            <Card className="flex items-center gap-3 p-5">
               <div className="grid size-9 place-items-center rounded-md bg-coral-soft text-coral"><CheckSquare2 size={17} /></div>
               <div><p className="text-sm font-semibold">Completed tasks</p><p className="text-xs text-faint">{groups.completed.length} recorded in task history</p></div>
-              <Badge tone="neutral">Now</Badge>
             </Card>
           </aside>
         </div>

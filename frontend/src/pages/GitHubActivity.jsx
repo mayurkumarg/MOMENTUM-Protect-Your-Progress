@@ -182,7 +182,7 @@ export default function GitHubActivity() {
   const navigate = useNavigate()
   const toast = useToast()
   const { dashboard, isLoading, error, refetch } = useGithubActivity()
-  const { connecting, connect } = useGithubConnect('/github')
+  const { connecting, connect } = useGithubConnect('/journal')
   const [retryingId, setRetryingId] = useState(null)
 
   useGithubOAuthReturn(refetch)
@@ -204,7 +204,7 @@ export default function GitHubActivity() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Develop"
-        title="GitHub"
+        title="Coding Journal"
         description="A quick read on your synced coding journal — commits and sync health, not a GitHub clone."
       />
 
