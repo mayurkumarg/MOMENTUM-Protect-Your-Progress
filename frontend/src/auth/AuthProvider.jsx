@@ -132,12 +132,20 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!auth.token || auth.status !== 'authenticated') return undefined
 
+    // The access token is short-lived by design (e.g. 15m) and refreshed
+    // transparently on the next API call — but a user who's just reading a
+    // page, not calling the API, never hits that path. Without attempting a
+    // refresh here first, this watchdog would sign them out the moment the
+    // access token's clock runs out even though their refresh token (valid
+    // for weeks) could have silently renewed the session.
     const timer = setInterval(() => {
-      if (isTokenExpired(auth.token)) signOut('expired')
+      if (isTokenExpired(auth.token)) {
+        refreshSession().catch(() => signOut('expired'))
+      }
     }, 30000)
 
     return () => clearInterval(timer)
-  }, [auth.token, auth.status, signOut])
+  }, [auth.token, auth.status, signOut, refreshSession])
 
   const value = useMemo(() => ({
     ...auth,
