@@ -1,0 +1,58 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - momentum
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    environment:
+      # Overrides for backend/.env so containers reach each other by service
+      # name rather than localhost. env_file values are used for everything
+      # else (JWT secrets, GitHub OAuth, Groq/Mailtrap keys, etc).
+      MONGO_URI: mongodb://mongo:27017/momentum_tasks
+      CLIENT_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/backend/uploads
+    ports:
+      - "5000:5000"
+    networks:
+      - momentum
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - momentum
+
+volumes:
+  mongo_data:
+  backend_uploads:
+
+networks:
+  momentum:
+    driver: bridge
