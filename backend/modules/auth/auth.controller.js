@@ -26,11 +26,11 @@ const register = async (req, res, next) => {
       });
     }
 
-    const user = await authService.registerUser(email, username, password);
+    const result = await authService.registerUser(email, username, password);
 
     return sendSuccess(res, 201, {
       message: 'Registration successful',
-      user,
+      ...result,
     });
   } catch (error) {
     next(error);

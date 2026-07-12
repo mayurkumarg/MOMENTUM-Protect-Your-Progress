@@ -83,7 +83,23 @@ const registerUser = async (email, username, password) => {
   // Create user
   const user = await userService.createEmailUser(email, username, passwordHash);
 
-  return userService.serializeUser(user);
+  // Issue tokens immediately so registration logs the user straight in —
+  // mirrors loginUser below. Without this, the frontend's post-register
+  // setSession() call receives a user with no token, reads that as an
+  // invalid/expired session, and bounces the brand-new user to the login
+  // page with a confusing "Your session expired" message.
+  const accessToken = signAccessToken(user._id.toString());
+  const refreshToken = signRefreshToken(user._id.toString());
+  const refreshTokenExpiresAt = new Date();
+  refreshTokenExpiresAt.setDate(refreshTokenExpiresAt.getDate() + 30);
+
+  await userService.addRefreshToken(user._id, refreshToken, refreshTokenExpiresAt);
+
+  return {
+    token: accessToken,
+    refreshToken,
+    user: userService.serializeUser(user),
+  };
 };
 
 // Login with email + password
