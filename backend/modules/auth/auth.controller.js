@@ -1,6 +1,6 @@
 const authService = require('./auth.service');
 const userService = require('../user/user.service');
-const { validateRegisterInput, validateLoginInput } = require('./auth.validation');
+const { validateRegisterInput, validateLoginInput, validateEmail } = require('./auth.validation');
 
 const encodeRedirectParam = (value) => encodeURIComponent(value);
 
@@ -81,6 +81,10 @@ const getGithubOAuthUrl = (req, res, next) => {
     const scope = 'user:email';
     const source = req.query.source === 'web' ? 'web' : 'extension';
     const returnTo = req.query.returnTo || '';
+    // The extension supplies its own chrome.identity redirect URL so the flow
+    // doesn't depend on a pre-registered EXTENSION_ID. Validated (must be a
+    // chromiumapp.org URL) in parseOAuthState before it's ever redirected to.
+    const extRedirect = authService.sanitizeExtensionRedirect(req.query.redirect_uri);
 
     console.log(`[AUTH] GitHub OAuth requested - source: ${source}, returnTo: ${returnTo}`);
 
@@ -95,7 +99,7 @@ const getGithubOAuthUrl = (req, res, next) => {
       client_id: clientId,
       redirect_uri: redirectUri,
       scope,
-      state: JSON.stringify({ source, returnTo }),
+      state: JSON.stringify({ source, returnTo, extRedirect }),
     });
 
     const githubOAuthUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
@@ -143,15 +147,20 @@ const githubCallback = async (req, res, next) => {
       return res.redirect(redirectUrl);
     }
 
-    const extensionId = process.env.EXTENSION_ID;
-    if (!extensionId) {
-      console.error(`[AUTH] Extension ID not configured`);
+    // Prefer the redirect URL the extension supplied for this flow (validated
+    // in parseOAuthState); fall back to a pre-registered EXTENSION_ID only for
+    // older extension builds that don't send one.
+    const extensionBase = parsedState.extRedirect
+      || (process.env.EXTENSION_ID ? `https://${process.env.EXTENSION_ID}.chromiumapp.org/` : null);
+    if (!extensionBase) {
+      console.error(`[AUTH] Extension redirect not provided and EXTENSION_ID not configured`);
       const errorUrl = `${clientUrl}/auth/login?error=${encodeURIComponent('Extension OAuth is not configured')}`;
       return res.redirect(errorUrl);
     }
 
     const tokenParams = `token=${encodeRedirectParam(result.token)}&refreshToken=${encodeRedirectParam(result.refreshToken)}`;
-    const extensionRedirect = `https://${extensionId}.chromiumapp.org/?${tokenParams}`;
+    const separator = extensionBase.includes('?') ? '&' : '?';
+    const extensionRedirect = `${extensionBase}${separator}${tokenParams}`;
     // Never log the redirect URL — it carries the access and refresh tokens.
     console.log('[AUTH] OAuth login success (extension), redirecting');
     return res.redirect(extensionRedirect);
@@ -232,6 +241,26 @@ const me = async (req, res, next) => {
   }
 };
 
+// Update account email (e.g. GitHub-OAuth users with no email on file)
+const updateEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !validateEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: { email: 'Valid email is required' },
+      });
+    }
+
+    const user = await userService.updateEmail(req.user.userId, email);
+    return sendSuccess(res, 200, user);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Update notification/reminder preferences
 const updatePreferences = async (req, res, next) => {
   try {
@@ -271,6 +300,7 @@ module.exports = {
   getGithubConnectUrl,
   githubCallback,
   me,
+  updateEmail,
   updatePreferences,
   refresh,
 };

@@ -49,6 +49,10 @@ export function buildTimelineSections(tasks = [], activities = []) {
     context: activity.metadata?.platform || activity.source,
     timestamp: activity.activityDate,
     durationMinutes: activity.durationMinutes,
+    // Carry the precise seconds through too so the timeline can show the real
+    // solving time (e.g. "1m 30s") instead of the coarse rounded minutes — the
+    // same durationSeconds every other activity view already prefers.
+    durationSeconds: activity.durationSeconds,
   })
 
   const byTimeAsc = (a, b) => new Date(a.timestamp) - new Date(b.timestamp)

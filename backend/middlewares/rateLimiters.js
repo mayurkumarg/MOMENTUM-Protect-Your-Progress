@@ -61,6 +61,13 @@ const githubWriteLimiter = makeLimiter({
   keyGenerator: userOrIpKey,
 });
 
+const updateEmailLimiter = makeLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: 'Too many email change attempts. Please try again later.',
+  keyGenerator: userOrIpKey,
+});
+
 module.exports = {
   loginLimiter,
   registerLimiter,
@@ -68,4 +75,5 @@ module.exports = {
   oauthStartLimiter,
   assistantLimiter,
   githubWriteLimiter,
+  updateEmailLimiter,
 };

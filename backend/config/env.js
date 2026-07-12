@@ -56,8 +56,8 @@ const validateEnv = () => {
     console.warn('[env] GROQ_API_KEY is not set — the AI Assistant will stay disabled until it is configured.');
   }
 
-  if (!process.env.MAILTRAP_API_TOKEN) {
-    console.warn('[env] MAILTRAP_API_TOKEN is not set — email reminders will stay disabled until it is configured.');
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn('[env] GMAIL_USER/GMAIL_APP_PASSWORD are not set — email reminders will stay disabled until both are configured.');
   }
 };
 

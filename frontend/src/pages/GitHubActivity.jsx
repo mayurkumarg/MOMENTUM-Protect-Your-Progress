@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Check, ExternalLink, Flame, GitBranch, GitCommitHorizontal, Github, Rocket, Sparkles, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Flame, GitBranch, GitCommitHorizontal, Github, LoaderCircle, Rocket, Sparkles, TrendingUp } from 'lucide-react'
+import { Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Section, SegmentedControl } from '../components/ui'
 import { HeroStat, StatTile } from '../components/AnalyticsCharts'
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Section } from '../components/ui'
 import { useToast } from '../components/ToastProvider'
 import { useGithubActivity } from '../hooks/useGithubActivity'
 import { useGithubConnect } from '../hooks/useGithubConnect'
@@ -11,6 +10,8 @@ import { githubApi } from '../api'
 import { formatDate, formatDateTime } from '../utils/format'
 
 const DIFFICULTY_TONE = { Easy: 'green', Medium: 'yellow', Hard: 'coral' }
+const DEFAULT_REPO_NAME = 'Momentum-DSA-Journal'
+const REPO_MODES = ['Create new', 'Use existing']
 
 // Placeholder tiles that show where this page grows next — no fake data,
 // just a visible extension point so future GitHub features slot in without
@@ -161,6 +162,140 @@ function AttentionRow({ entry, onRetry, isRetrying }) {
   )
 }
 
+function RepoRow({ repo, onSelect, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(repo)}
+      disabled={disabled}
+      className="focus-ring flex w-full items-center justify-between gap-3 rounded-md border border-line px-3.5 py-3 text-left transition-colors hover:border-line-strong hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-copy">{repo.fullName}</p>
+        <p className="mt-0.5 truncate text-xs text-faint">{repo.description || 'No description'}</p>
+      </div>
+      <Badge tone={repo.private ? 'coral' : 'neutral'}>{repo.private ? 'Private' : 'Public'}</Badge>
+    </button>
+  )
+}
+
+// Lets a user pick or create a journal repository right here on the Journal
+// page — connecting GitHub used to dead-end in a redirect to Settings just to
+// finish this one step. Mirrors GithubIntegrationPanel's create/use-existing
+// logic, just rendered inline instead of inside a Settings-only modal.
+function RepositoryPicker({ onConnected }) {
+  const toast = useToast()
+  const [mode, setMode] = useState('Create new')
+  const [repoName, setRepoName] = useState(DEFAULT_REPO_NAME)
+  const [repoDescription, setRepoDescription] = useState('')
+  const [visibility, setVisibility] = useState('Private')
+  const [existingRepos, setExistingRepos] = useState(null)
+  const [loadingRepos, setLoadingRepos] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const loadExistingRepos = async () => {
+    setLoadingRepos(true)
+    try {
+      const repos = await githubApi.listGithubRepos()
+      setExistingRepos(repos)
+    } catch (error) {
+      toast.error(error.message || 'Could not load your repositories.')
+    } finally {
+      setLoadingRepos(false)
+    }
+  }
+
+  const handleModeChange = (nextMode) => {
+    setMode(nextMode)
+    if (nextMode === 'Use existing' && !existingRepos && !loadingRepos) {
+      loadExistingRepos()
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!repoName.trim()) {
+      toast.error('Repository name is required.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await githubApi.createGithubRepo({
+        name: repoName.trim(),
+        description: repoDescription.trim(),
+        isPrivate: visibility === 'Private',
+      })
+      toast.success('Repository created and connected.')
+      onConnected()
+    } catch (error) {
+      toast.error(error.message || 'Could not create repository.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSelectExisting = async (repo) => {
+    setSubmitting(true)
+    try {
+      await githubApi.connectGithubRepo({ owner: repo.owner, name: repo.name })
+      toast.success('Repository connected.')
+      onConnected()
+    } catch (error) {
+      toast.error(error.message || 'Could not connect that repository.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start gap-3">
+        <div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Github size={17} /></div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-copy">Choose a repository</p>
+          <p className="mt-1 text-xs leading-5 text-faint">Pick where Momentum commits your solved problems — right here, no need to visit Settings.</p>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <SegmentedControl options={REPO_MODES} value={mode} onChange={handleModeChange} />
+      </div>
+
+      {mode === 'Create new' ? (
+        <div className="mt-4 space-y-4">
+          <Input label="Repository name" value={repoName} onChange={(event) => setRepoName(event.target.value)} placeholder={DEFAULT_REPO_NAME} />
+          <Input
+            label="Description (optional)"
+            value={repoDescription}
+            onChange={(event) => setRepoDescription(event.target.value)}
+            placeholder="My DSA practice journal"
+          />
+          <div>
+            <span className="mb-2 block text-sm font-semibold text-copy">Visibility</span>
+            <SegmentedControl options={['Private', 'Public']} value={visibility} onChange={setVisibility} />
+          </div>
+          <Button onClick={handleCreate} disabled={submitting}>
+            {submitting ? 'Creating...' : 'Create & connect'}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
+          {loadingRepos ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-faint">
+              <LoaderCircle size={14} className="animate-spin" /> Loading your repositories...
+            </div>
+          ) : existingRepos && existingRepos.length > 0 ? (
+            existingRepos.map((repo) => (
+              <RepoRow key={repo.id} repo={repo} onSelect={handleSelectExisting} disabled={submitting} />
+            ))
+          ) : (
+            <p className="py-6 text-center text-sm text-faint">No repositories found on your GitHub account.</p>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function ComingSoonTile({ icon: Icon, title, detail }) {
   return (
     <Card className="flex items-start gap-3 border-dashed p-4">
@@ -179,7 +314,6 @@ function ComingSoonTile({ icon: Icon, title, detail }) {
 }
 
 export default function GitHubActivity() {
-  const navigate = useNavigate()
   const toast = useToast()
   const { dashboard, isLoading, error, refetch } = useGithubActivity()
   const { connecting, connect } = useGithubConnect('/journal')
@@ -228,14 +362,7 @@ export default function GitHubActivity() {
           />
         </Card>
       ) : !dashboard.repository ? (
-        <Card>
-          <EmptyState
-            icon={Github}
-            title="Choose a repository"
-            description="You're connected to GitHub as a repository — pick or create one in Settings to start syncing."
-            action={<Button onClick={() => navigate('/settings')}>Choose repository in Settings</Button>}
-          />
-        </Card>
+        <RepositoryPicker onConnected={refetch} />
       ) : (
         <div className="animate-fade-up space-y-8">
           <GithubHero status={dashboard} stats={dashboard.stats} consistency={dashboard.consistency} weeklyComparison={dashboard.weeklyComparison} />

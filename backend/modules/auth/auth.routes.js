@@ -1,7 +1,7 @@
 const express = require('express');
 const authController = require('./auth.controller');
 const authMiddleware = require('../../middlewares/authMiddleware');
-const { loginLimiter, registerLimiter, refreshLimiter, oauthStartLimiter } = require('../../middlewares/rateLimiters');
+const { loginLimiter, registerLimiter, refreshLimiter, oauthStartLimiter, updateEmailLimiter } = require('../../middlewares/rateLimiters');
 
 const router = express.Router();
 
@@ -23,6 +23,7 @@ router.post('/refresh', refreshLimiter, authController.refresh);
 
 // User
 router.get('/me', authMiddleware, authController.me);
+router.patch('/me/email', authMiddleware, updateEmailLimiter, authController.updateEmail);
 router.patch('/preferences', authMiddleware, authController.updatePreferences);
 
 module.exports = router;

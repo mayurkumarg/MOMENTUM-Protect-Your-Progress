@@ -41,7 +41,10 @@ const classifyScheduleTightness = (overdueTasksCount, dueSoonCount) => {
   return 'Relaxed';
 };
 
-const classifyTaskConsistency = (currentStreakDays, activeDaysLast7) => {
+const classifyTaskConsistency = (currentStreakDays, activeDaysLast7, hasAnythingToAssess) => {
+  // A brand-new (or entirely empty) workspace has nothing to measure yet —
+  // show a neutral "Not Started" rather than scolding with "Needs Attention".
+  if (!hasAnythingToAssess) return 'Not Started';
   if (currentStreakDays === 0 && activeDaysLast7 <= 1) return 'Needs Attention';
   if (currentStreakDays < THRESHOLDS.STREAK_GOOD_DAYS && activeDaysLast7 < 4) return 'Building';
   return 'On Track';
@@ -77,9 +80,13 @@ const computeWorkloadSummary = async (userId) => {
   const sevenDaysAgoKey = formatDateKey(sevenDaysAgo);
   const activeDaysLast7 = [...activityDayKeys].filter((key) => key >= sevenDaysAgoKey).length;
 
+  // Nothing tracked at all (no open tasks, no recent activity, no recent
+  // completions) means there's no consistency to judge — a new user.
+  const hasAnythingToAssess = openTasks.length > 0 || recentActivity.length > 0 || completedTasksLast7 > 0;
+
   const workloadLevel = classifyWorkloadLevel(totalEstimatedHours, openTasks.length);
   const scheduleTightness = classifyScheduleTightness(overdueTasksCount, dueSoonCount);
-  const taskConsistency = classifyTaskConsistency(currentStreakDays, activeDaysLast7);
+  const taskConsistency = classifyTaskConsistency(currentStreakDays, activeDaysLast7, hasAnythingToAssess);
   const overloadStatus = classifyOverloadStatus(workloadLevel, scheduleTightness);
 
   return {

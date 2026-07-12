@@ -35,7 +35,8 @@
         "config/env.js",
         "config/constants.js",
         "content/content.js"
-      ]
+      ],
+      "run_at": "document_start"
     },
     {
       "matches": [

@@ -98,58 +98,64 @@ window.addEventListener('message', (event) => {
   }
 });
 
-// 3. Expose Extension Status to the website
-document.documentElement.setAttribute('data-momentum-extension-installed', 'true');
+// 3. Expose extension status to the website.
+//
+// Detection must be race-proof: the website's React app and this content
+// script can mount in either order. So we (a) set the status attribute
+// SYNCHRONOUSLY and unconditionally the instant this script runs — never
+// gated behind an async storage round-trip — and (b) answer a MOMENTUM_PING
+// from the page, so if the page mounts after our one-shot announce it can
+// still ask and get a fresh answer. The attribute name here is exactly the
+// one the useExtension hook reads.
+const STATUS_ATTR = 'data-momentum-extension-status';
 
-// Initial status check to expose connection state
-chrome.storage.local.get([__momentumStorageKeys.USER, __momentumStorageKeys.SYNC_STATUS], (result) => {
-  if (chrome.runtime.lastError) return;
-  const isAuthenticated = !!result[__momentumStorageKeys.USER];
-  const status = isAuthenticated ? 'connected' : 'installed';
-  document.documentElement.setAttribute('data-momentum-extension-status', status);
+function announceStatus(status) {
+  document.documentElement.setAttribute(STATUS_ATTR, status);
+  // Legacy alias kept for any older website build that looked for it.
+  document.documentElement.setAttribute('data-momentum-extension-installed', 'true');
   window.postMessage({ type: 'MOMENTUM_EXTENSION_STATUS', status }, '*');
-  
-  const syncStatus = result[__momentumStorageKeys.SYNC_STATUS] || { state: 'Idle', pendingCount: 0 };
-  window.postMessage({
-    type: 'MOMENTUM_EXTENSION_HEALTH',
-    health: {
-      version: __momentumConfig.VERSION,
-      authStatus: isAuthenticated ? 'connected' : 'disconnected',
-      syncState: syncStatus.state,
-      queueSize: syncStatus.pendingCount,
-      lastSuccess: syncStatus.lastSuccess,
-      lastError: syncStatus.lastError
-    }
-  }, '*');
+}
+
+// Baseline: present but not necessarily logged in. Set immediately so the site
+// detects the extension even if storage is slow or unavailable.
+announceStatus('installed');
+
+function publishStatusAndHealth() {
+  chrome.storage.local.get([__momentumStorageKeys.USER, __momentumStorageKeys.SYNC_STATUS], (result) => {
+    if (chrome.runtime.lastError) return;
+    const isAuthenticated = !!result[__momentumStorageKeys.USER];
+    announceStatus(isAuthenticated ? 'connected' : 'installed');
+
+    const syncStatus = result[__momentumStorageKeys.SYNC_STATUS] || { state: 'Idle', pendingCount: 0 };
+    window.postMessage({
+      type: 'MOMENTUM_EXTENSION_HEALTH',
+      health: {
+        version: __momentumConfig.VERSION,
+        authStatus: isAuthenticated ? 'connected' : 'disconnected',
+        syncState: syncStatus.state,
+        queueSize: syncStatus.pendingCount,
+        lastSuccess: syncStatus.lastSuccess,
+        lastError: syncStatus.lastError
+      }
+    }, '*');
+  });
+}
+
+publishStatusAndHealth();
+
+// Answer late pings from the website (covers the case where the page mounts
+// after our initial announce already fired).
+window.addEventListener('message', (event) => {
+  if (event.source !== window || !event.data) return;
+  if (event.data.type === 'MOMENTUM_PING') {
+    publishStatusAndHealth();
+  }
 });
 
-// Listen for status changes from background
+// Re-publish whenever the stored auth/sync state changes (login, logout, sync).
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local') {
-    if (changes[__momentumStorageKeys.USER]) {
-      const isAuthenticated = !!changes[__momentumStorageKeys.USER].newValue;
-      const status = isAuthenticated ? 'connected' : 'installed';
-      document.documentElement.setAttribute('data-momentum-extension-status', status);
-      window.postMessage({ type: 'MOMENTUM_EXTENSION_STATUS', status }, '*');
-    }
-    
-    if (changes[__momentumStorageKeys.USER] || changes[__momentumStorageKeys.SYNC_STATUS]) {
-      chrome.storage.local.get([__momentumStorageKeys.USER, __momentumStorageKeys.SYNC_STATUS], (result) => {
-        const isAuthenticated = !!result[__momentumStorageKeys.USER];
-        const syncStatus = result[__momentumStorageKeys.SYNC_STATUS] || { state: 'Idle', pendingCount: 0 };
-        
-        window.postMessage({
-          type: 'MOMENTUM_EXTENSION_HEALTH',
-          health: {
-            version: __momentumConfig.VERSION,
-            authStatus: isAuthenticated ? 'connected' : 'disconnected',
-            syncState: syncStatus.state,
-            queueSize: syncStatus.pendingCount,
-            lastSuccess: syncStatus.lastSuccess,
-            lastError: syncStatus.lastError
-          }
-        }, '*');
-      });
-    }
+  if (areaName !== 'local') return;
+  if (changes[__momentumStorageKeys.USER] || changes[__momentumStorageKeys.SYNC_STATUS]) {
+    publishStatusAndHealth();
   }
 });

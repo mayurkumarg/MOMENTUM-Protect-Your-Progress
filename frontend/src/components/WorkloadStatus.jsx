@@ -15,6 +15,7 @@ const TONE_BY_VALUE = {
   Critical: 'coral',
   'Needs Attention': 'coral',
   Overloaded: 'coral',
+  'Not Started': 'neutral',
 }
 
 function StatusRow({ label, value }) {

@@ -1,45 +1,46 @@
-// Thin transport around Mailtrap's Sending API — the ONLY place that knows
-// how to actually send an email. Swapping providers later (or adding a
-// second channel like SMS) means touching this module, not every caller.
-// Uses axios, already a dependency (same HTTP client groq.service.js and
-// github.service.js use).
+// Thin transport around Gmail SMTP (via Nodemailer) — the ONLY place that
+// knows how to actually send an email. Swapping providers later (or adding
+// a second channel like SMS) means touching this module, not every caller.
+//
+// Uses a regular Gmail account + an "App Password" (not the account
+// password — generate one at https://myaccount.google.com/apppasswords,
+// requires 2-Step Verification enabled). Unlike Mailtrap's free demo
+// domain, this delivers to any recipient with no domain verification step,
+// at the cost of Gmail's own sending limits (~500/day on a normal account).
 
-const axios = require('axios');
+const nodemailer = require('nodemailer');
 
-const MAILTRAP_SEND_URL = 'https://send.api.mailtrap.io/api/send';
-const REQUEST_TIMEOUT_MS = 15000;
-
-const getApiToken = () => process.env.MAILTRAP_API_TOKEN || '';
-const getFromEmail = () => process.env.MAIL_FROM_EMAIL || 'noreply@momentum-sync.com';
+const getUser = () => process.env.GMAIL_USER || '';
+const getAppPassword = () => process.env.GMAIL_APP_PASSWORD || '';
 const getFromName = () => process.env.MAIL_FROM_NAME || 'Momentum';
 
-const isConfigured = () => Boolean(getApiToken());
+const isConfigured = () => Boolean(getUser() && getAppPassword());
 
-const sendEmail = async ({ to, subject, html, text, category }) => {
-  const apiToken = getApiToken();
-  if (!apiToken) {
-    throw new Error('Email is not configured (MAILTRAP_API_TOKEN unset).');
+// Built lazily rather than at require time, so a missing/invalid config
+// doesn't crash module load — isConfigured() gates every caller first.
+let transporter = null;
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: getUser(), pass: getAppPassword() },
+    });
+  }
+  return transporter;
+};
+
+const sendEmail = async ({ to, subject, html, text }) => {
+  if (!isConfigured()) {
+    throw new Error('Email is not configured (GMAIL_USER/GMAIL_APP_PASSWORD unset).');
   }
 
-  await axios.post(
-    MAILTRAP_SEND_URL,
-    {
-      from: { email: getFromEmail(), name: getFromName() },
-      to: [{ email: to }],
-      subject,
-      html,
-      text,
-      category: category || 'reminder',
-    },
-    {
-      headers: {
-        // Mailtrap's own custom header, not the more common Authorization: Bearer.
-        'Api-Token': apiToken,
-        'Content-Type': 'application/json',
-      },
-      timeout: REQUEST_TIMEOUT_MS,
-    }
-  );
+  await getTransporter().sendMail({
+    from: `"${getFromName()}" <${getUser()}>`,
+    to,
+    subject,
+    html,
+    text,
+  });
 };
 
 module.exports = {

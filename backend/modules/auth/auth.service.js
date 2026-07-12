@@ -37,8 +37,17 @@ const verifyGithubLinkToken = (linkToken) => {
   }
 };
 
+// A Chrome extension's chrome.identity redirect URL is always
+// https://<32-char-extension-id>.chromiumapp.org/. Only such a URL is ever
+// accepted as a post-login redirect target, so a caller can't turn this OAuth
+// flow into an open redirect to an arbitrary host.
+const CHROMIUMAPP_REDIRECT_RE = /^https:\/\/[a-p]{32}\.chromiumapp\.org\/?$/;
+
+const sanitizeExtensionRedirect = (value) =>
+  (typeof value === 'string' && CHROMIUMAPP_REDIRECT_RE.test(value)) ? value : null;
+
 const parseOAuthState = (state) => {
-  if (!state) return { source: 'extension', returnTo: '', linkUserId: null };
+  if (!state) return { source: 'extension', returnTo: '', linkUserId: null, extRedirect: null };
 
   try {
     const parsed = JSON.parse(state);
@@ -46,9 +55,10 @@ const parseOAuthState = (state) => {
       source: parsed.source === 'web' ? 'web' : 'extension',
       returnTo: typeof parsed.returnTo === 'string' ? parsed.returnTo : '',
       linkUserId: parsed.linkToken ? verifyGithubLinkToken(parsed.linkToken) : null,
+      extRedirect: sanitizeExtensionRedirect(parsed.extRedirect),
     };
   } catch {
-    return { source: state === 'web' ? 'web' : 'extension', returnTo: '', linkUserId: null };
+    return { source: state === 'web' ? 'web' : 'extension', returnTo: '', linkUserId: null, extRedirect: null };
   }
 };
 
@@ -250,6 +260,7 @@ module.exports = {
   logoutUser,
   getAuthenticatedUser,
   parseOAuthState,
+  sanitizeExtensionRedirect,
   signGithubLinkToken,
   signAccessToken,
   signRefreshToken,

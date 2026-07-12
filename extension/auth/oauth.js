@@ -19,9 +19,18 @@
 
   self.__MomentumOAuth = {
     performOAuth(sendResponse) {
+      // Tell the backend where to send us back to. This is THIS extension's
+      // own https://<id>.chromiumapp.org/ URL, so the flow works no matter
+      // what ID Chrome assigned on install — no need to pre-register the
+      // extension ID in the backend's environment.
+      const redirectUri = chrome.identity.getRedirectURL();
+      const authUrl =
+        `${config.API_ENDPOINTS.AUTH_GITHUB}` +
+        `?source=extension&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
       chrome.identity.launchWebAuthFlow(
         {
-          url: config.API_ENDPOINTS.AUTH_GITHUB,
+          url: authUrl,
           interactive: true,
         },
         (responseUrl) => {

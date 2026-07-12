@@ -14,7 +14,7 @@ const serializeUser = (user) => ({
   authProvider: user.authProvider,
   isEmailVerified: user.isEmailVerified,
   notificationPreferences: {
-    reminderChannel: user.notificationPreferences?.reminderChannel || 'IN_APP',
+    reminderChannel: user.notificationPreferences?.reminderChannel || 'BOTH',
   },
 });
 
@@ -95,6 +95,24 @@ const removeAllRefreshTokens = async (userId) => {
   return RefreshToken.deleteMany({ userId });
 };
 
+const updateEmail = async (userId, email) => {
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const existing = await findByEmail(normalizedEmail);
+  if (existing && String(existing._id) !== String(userId)) {
+    throw new AppError('Email already registered', 400);
+  }
+
+  const user = await User.findById(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  user.email = normalizedEmail;
+  user.isEmailVerified = false;
+  await user.save();
+
+  return serializeUser(user);
+};
+
 const REMINDER_CHANNELS = ['IN_APP', 'EMAIL', 'BOTH'];
 
 const updateNotificationPreferences = async (userId, reminderChannel) => {
@@ -129,5 +147,6 @@ module.exports = {
   findUserByRefreshToken,
   removeRefreshToken,
   removeAllRefreshTokens,
+  updateEmail,
   updateNotificationPreferences,
 };

@@ -104,15 +104,22 @@ export function AuthProvider({ children }) {
       if (initial.status === 'authenticated') {
         try {
           const userData = await getCurrentUser()
-          setAuth({ 
-            token: initial.token, 
-            user: userData, 
-            status: 'authenticated', 
-            reason: null 
+          setAuth({
+            token: initial.token,
+            user: userData,
+            status: 'authenticated',
+            reason: null
           })
         } catch (err) {
+          // The token decoded fine (right shape, not expired) but the backend
+          // couldn't verify it — most commonly the user it points to no
+          // longer exists (e.g. deleted account, wiped dev DB). Falling back
+          // to the token-only placeholder here would leave the app stuck
+          // "authenticated" with a user object that has no username/email
+          // (see token.js getTokenUser), which is exactly the "?" ghost
+          // session bug. Any failure to verify means: not a real session.
           console.error('Failed to fetch current user:', err)
-          setAuth(initial)
+          signOut('invalid')
         }
       } else {
         setAuth(initial)
@@ -120,7 +127,7 @@ export function AuthProvider({ children }) {
     }
 
     initializeAuth()
-  }, [])
+  }, [signOut])
 
   useEffect(() => {
     if (!auth.token || auth.status !== 'authenticated') return undefined

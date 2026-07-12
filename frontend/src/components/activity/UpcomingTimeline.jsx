@@ -1,7 +1,7 @@
 import { CalendarClock, CheckCircle2, Clock, Code2, ListPlus, TriangleAlert } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Card, EmptyState } from '../ui'
-import { formatDayLabel, formatMinutes, formatTime } from '../../utils/format'
+import { formatDayLabel, formatDurationHuman, formatMinutes, formatTime } from '../../utils/format'
 
 const ITEM_CONFIG = {
   'task-overdue': { icon: TriangleAlert, tone: 'border-coral bg-coral-soft text-coral' },
@@ -19,6 +19,8 @@ function TimelineRow({ item }) {
   const config = ITEM_CONFIG[item.type] || ITEM_CONFIG['task-upcoming']
   const Icon = config.icon
   const whenLabel = `${isDueLooking(item.type) ? 'Due ' : ''}${formatDayLabel(item.timestamp)} · ${formatTime(item.timestamp)}`
+  // Prefer the precise seconds; fall back to the coarse minutes for older records.
+  const durationLabel = formatDurationHuman(item.durationSeconds) || (item.durationMinutes ? formatMinutes(item.durationMinutes) : null)
 
   return (
     <div className="flex items-start gap-3 px-4 py-3 sm:px-5">
@@ -26,7 +28,7 @@ function TimelineRow({ item }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-copy">{item.title}</p>
         <p className="mt-0.5 truncate text-xs text-faint">
-          {item.context}{item.durationMinutes ? ` · ${formatMinutes(item.durationMinutes)}` : ''} · {whenLabel}
+          {item.context}{durationLabel ? ` · ${durationLabel}` : ''} · {whenLabel}
         </p>
       </div>
     </div>

@@ -55,6 +55,14 @@ export function getCurrentUser() {
   })
 }
 
+export function updateEmail(email) {
+  return apiRequest('/auth/me/email', {
+    method: 'PATCH',
+    auth: true,
+    body: { email },
+  })
+}
+
 export function updateNotificationPreferences(reminderChannel) {
   return apiRequest('/auth/preferences', {
     method: 'PATCH',

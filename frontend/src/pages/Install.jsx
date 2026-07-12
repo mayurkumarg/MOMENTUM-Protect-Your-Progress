@@ -1,8 +1,10 @@
 import { useMemo } from 'react'
-import { CheckCircle2, Chrome, Download, FolderOpen, ShieldCheck, ToggleRight } from 'lucide-react'
+import { CheckCircle2, Chrome, Copy, Download, FolderOpen, ShieldCheck, ToggleRight } from 'lucide-react'
 import { Button, Card, Section } from '../components/ui'
+import { useToast } from '../components/ToastProvider'
 
 const DOWNLOAD_URL = '/downloads/momentum-sync-extension.zip'
+const EXTENSIONS_URL = 'chrome://extensions'
 
 function detectBrowser() {
   if (typeof navigator === 'undefined') return 'unknown'
@@ -28,7 +30,8 @@ const STEPS = [
   {
     icon: ToggleRight,
     title: 'Open chrome://extensions and enable Developer mode',
-    text: 'Paste chrome://extensions into your address bar, then switch on the "Developer mode" toggle in the top-right corner.',
+    text: 'Copy the address below into your address bar, then switch on the "Developer mode" toggle in the top-right corner.',
+    copyValue: EXTENSIONS_URL,
   },
   {
     icon: CheckCircle2,
@@ -40,6 +43,20 @@ const STEPS = [
 export default function Install() {
   const browser = useMemo(detectBrowser, [])
   const supported = browser === 'chrome' || browser === 'edge'
+  const toast = useToast()
+
+  // Chrome blocks web pages from navigating to chrome:// URLs directly (a
+  // browser security restriction, not something we control), so the closest
+  // thing to "clickable" is a one-click copy the user pastes into their
+  // address bar themselves.
+  const handleCopy = async (value) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success('Copied — paste it into your address bar.')
+    } catch {
+      toast.error('Could not copy automatically — select and copy the address manually.')
+    }
+  }
 
   return (
     <div className="min-h-screen px-4 py-12">
@@ -76,6 +93,16 @@ export default function Install() {
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink">{step.title}</p>
                   <p className="mt-1 text-sm leading-5 text-muted">{step.text}</p>
+                  {step.copyValue && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(step.copyValue)}
+                      className="focus-ring mt-2 flex items-center gap-2 rounded-md border border-line bg-surface-subtle px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-accent-soft hover:text-accent"
+                    >
+                      <Copy size={13} />
+                      {step.copyValue}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

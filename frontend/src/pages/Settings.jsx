@@ -9,7 +9,7 @@ import ThemeSelector from '../components/ThemeSelector'
 import { useAuth } from '../auth/AuthProvider'
 import { useLogout } from '../auth/hooks'
 import { useExtension } from '../hooks/useExtension'
-import { updateNotificationPreferences } from '../api/auth'
+import { updateEmail, updateNotificationPreferences } from '../api/auth'
 
 const FOCUS_STORAGE_KEY = 'momentum-current-focus'
 
@@ -19,8 +19,8 @@ const REMINDER_CHANNEL_OPTIONS = [
   { value: 'BOTH', label: 'Both' },
 ]
 const REMINDER_CHANNEL_LABELS = REMINDER_CHANNEL_OPTIONS.map((option) => option.label)
-const channelToLabel = (value) => REMINDER_CHANNEL_OPTIONS.find((option) => option.value === value)?.label || 'In-app'
-const labelToChannel = (label) => REMINDER_CHANNEL_OPTIONS.find((option) => option.label === label)?.value || 'IN_APP'
+const channelToLabel = (value) => REMINDER_CHANNEL_OPTIONS.find((option) => option.value === value)?.label || 'Both'
+const labelToChannel = (label) => REMINDER_CHANNEL_OPTIONS.find((option) => option.label === label)?.value || 'BOTH'
 
 function SettingRow({ icon: Icon, title, description, children }) {
   return <div className="flex flex-col gap-4 border-b border-line px-5 py-5 last:border-0 sm:flex-row sm:items-center"><div className="flex min-w-0 flex-1 gap-3"><div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-subtle text-muted"><Icon size={17} /></div><div><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs leading-5 text-faint">{description}</p></div></div><div className="shrink-0">{children}</div></div>
@@ -36,9 +36,37 @@ export default function Settings() {
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [isSavingChannel, setIsSavingChannel] = useState(false)
+  const [isEditingEmail, setIsEditingEmail] = useState(false)
+  const [emailInput, setEmailInput] = useState('')
+  const [isSavingEmail, setIsSavingEmail] = useState(false)
 
   const hasEmail = Boolean(auth.user?.email)
-  const reminderChannel = auth.user?.notificationPreferences?.reminderChannel || 'IN_APP'
+  const reminderChannel = auth.user?.notificationPreferences?.reminderChannel || 'BOTH'
+
+  const startEditingEmail = () => {
+    setEmailInput(auth.user?.email || '')
+    setIsEditingEmail(true)
+  }
+
+  const handleEmailSave = async () => {
+    const trimmed = emailInput.trim()
+    if (!trimmed) {
+      toast.error('Enter an email address.')
+      return
+    }
+
+    setIsSavingEmail(true)
+    try {
+      const updatedUser = await updateEmail(trimmed)
+      auth.updateUser(updatedUser)
+      toast.success('Email updated.')
+      setIsEditingEmail(false)
+    } catch (error) {
+      toast.error(error.message || 'Could not update email.')
+    } finally {
+      setIsSavingEmail(false)
+    }
+  }
 
   const handleChannelChange = async (label) => {
     const channel = labelToChannel(label)
@@ -96,9 +124,34 @@ export default function Settings() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-display text-[15px] font-bold text-ink">{auth.user?.username || 'Your account'}</p>
-                  <p className="truncate text-sm text-muted">{auth.user?.email || 'No email on file'}</p>
+                  {!isEditingEmail && (
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm text-muted">{auth.user?.email || 'No email on file'}</p>
+                      <button type="button" className="focus-ring shrink-0 text-xs font-semibold text-accent hover:underline" onClick={startEditingEmail}>
+                        {hasEmail ? 'Change' : 'Add email'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
+              {isEditingEmail && (
+                <div className="mt-5 flex flex-col gap-2.5 border-b border-line pb-5 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Input
+                      label="Email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={emailInput}
+                      onChange={(event) => setEmailInput(event.target.value)}
+                      hint="Required for email reminders."
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleEmailSave} disabled={isSavingEmail}>{isSavingEmail ? 'Saving…' : 'Save'}</Button>
+                    <Button variant="secondary" onClick={() => setIsEditingEmail(false)} disabled={isSavingEmail}>Cancel</Button>
+                  </div>
+                </div>
+              )}
               <div className="mt-5">
                 <Input label="Current focus" placeholder="e.g. Interview preparation" hint="Used to keep guidance relevant." value={focus} onChange={handleFocusChange} />
               </div>

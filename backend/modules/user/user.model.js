@@ -57,14 +57,15 @@ const userSchema = new Schema(
       default: 'user',
     },
 
-    // Reminder delivery channel. Default IN_APP preserves today's behavior
-    // for every existing user with no migration — the reminder scheduler
-    // only sends email for users who explicitly opt into EMAIL or BOTH.
+    // Reminder delivery channel. Defaults to BOTH so a new user gets in-app
+    // and email reminders out of the box; the scheduler already skips the
+    // email leg for any user with no email on file (see reminder.scheduler.js),
+    // so this is safe for GitHub-login users too.
     notificationPreferences: {
       reminderChannel: {
         type: String,
         enum: ['IN_APP', 'EMAIL', 'BOTH'],
-        default: 'IN_APP',
+        default: 'BOTH',
       },
     },
   },

@@ -9,6 +9,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, 
 import { useActivities } from '../hooks/useActivities'
 import { useAnalyticsSummary } from '../hooks/useAnalyticsSummary'
 import { useDsaSummary } from '../hooks/useDsaSummary'
+import { useExtension } from '../hooks/useExtension'
 import { useTasks } from '../hooks/useTasks'
 import { useWorkload } from '../hooks/useWorkload'
 import { formatActivityDuration, formatDateTime, formatDurationHuman, getGreeting } from '../utils/format'
@@ -52,6 +53,7 @@ export default function Overview() {
   const workloadQuery = useWorkload()
   const analyticsQuery = useAnalyticsSummary()
   const dsaQuery = useDsaSummary()
+  const extension = useExtension()
 
   const groups = useMemo(() => splitTasks(tasksQuery.tasks), [tasksQuery.tasks])
   const focusNext = groups.today[0] || groups.upcoming[0] || null
@@ -61,6 +63,10 @@ export default function Overview() {
   const error = tasksQuery.error || activityQuery.error
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())
   const isFirstTimeUser = !activityQuery.isLoading && activityQuery.activities.length === 0
+  // Only prompt to install when the extension genuinely isn't there. useExtension
+  // is the single source of truth for extension status (Settings reads the same
+  // hook), so once the content script announces itself the homepage stops asking.
+  const shouldPromptInstall = isFirstTimeUser && !extension.isInstalled
 
   const tasksCompletedToday = useMemo(() => {
     const todayKey = new Date().toDateString()
@@ -79,7 +85,7 @@ export default function Overview() {
     <div className="space-y-8">
       <PageHeader eyebrow={dateLabel} title={getGreeting()} description="A calm view of what deserves your attention next." actions={<Button icon={Plus} onClick={() => navigate('/tasks')}>Add task</Button>} />
 
-      {isFirstTimeUser ? (
+      {shouldPromptInstall ? (
         <Card className="overflow-hidden border-accent/30 bg-accent-soft/40">
           <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
