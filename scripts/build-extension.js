@@ -51,8 +51,8 @@ let backendUrl = 'http://localhost:5000';
 let frontendUrl = 'http://localhost:5173';
 
 if (env === 'production') {
-  backendUrl = 'https://api.momentum-sync.com'; // Replace with actual production URL
-  frontendUrl = 'https://momentum-sync.com'; // Replace with actual production URL
+  backendUrl = 'https://momentum-protect-your-progress.onrender.com';
+  frontendUrl = 'https://momentum-protect-your-progress.vercel.app';
 }
 
 const envContent = `/**
@@ -79,8 +79,8 @@ if (env === 'production') {
   let manifestContent = fs.readFileSync(manifestPath, 'utf8');
 
   manifestContent = manifestContent
-    .replace(/"http:\/\/localhost:5000\/\*"/g, `"https://api.momentum-sync.com/*"`)
-    .replace(/"http:\/\/localhost:5173\/\*"/g, `"https://momentum-sync.com/*"`);
+    .replace(/"http:\/\/localhost:5000\/\*"/g, `"${backendUrl}/*"`)
+    .replace(/"http:\/\/localhost:5173\/\*"/g, `"${frontendUrl}/*"`);
 
   fs.writeFileSync(manifestPath, manifestContent, 'utf8');
 
@@ -88,9 +88,10 @@ if (env === 'production') {
   const popupPath = path.join(DIST_DIR, 'popup.html');
   let popupContent = fs.readFileSync(popupPath, 'utf8');
 
+  const frontendHost = frontendUrl.replace(/^https?:\/\//, '');
   popupContent = popupContent.replace(
-    /href="http:\/\/localhost:5173"/g,
-    'href="https://momentum-sync.com"'
+    /<a href="http:\/\/localhost:5173" target="_blank">momentum-sync\.com<\/a>/g,
+    `<a href="${frontendUrl}" target="_blank">${frontendHost}</a>`
   );
 
   fs.writeFileSync(popupPath, popupContent, 'utf8');
