@@ -153,9 +153,22 @@ const githubLogin = async (code, linkUserId = null) => {
         throw new AppError('Your session could not be found. Please sign in again.', 401);
       }
 
-      const owner = await User.findOne({ githubId: githubUser.id });
+      // password has `select: false` in the schema — must opt in explicitly,
+      // otherwise owner.password below would read as undefined regardless
+      // of whether one actually exists.
+      const owner = await User.findOne({ githubId: githubUser.id }).select('+password');
       if (owner && String(owner._id) !== String(currentUser._id)) {
-        throw new AppError('This GitHub account is already linked to a different Momentum account.', 409);
+        // Completing the GitHub OAuth flow just proved this person owns that
+        // GitHub account, so let them move the link to whichever Momentum
+        // account they're currently using instead of hard-blocking them —
+        // except when the other account has no other way in (a GitHub-login
+        // account with no password) — detaching would lock it out forever.
+        if (owner.authProvider === 'github' && !owner.password) {
+          throw new AppError('This GitHub account is already linked to a different Momentum account.', 409);
+        }
+
+        owner.githubId = undefined;
+        await owner.save();
       }
 
       if (!currentUser.githubId) {
