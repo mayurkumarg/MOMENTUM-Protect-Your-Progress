@@ -10,19 +10,45 @@ const __momentumConfig = self.__MomentumConfig;
 const __momentumStorageKeys = __momentumConfig.STORAGE_KEYS;
 const ACTIONS = __momentumConfig.MESSAGE_ACTIONS;
 
+// Reloading/updating the extension orphans content scripts already injected
+// into open tabs: this code keeps running but its chrome.* APIs are torn down
+// and throw on touch. Nothing here can recover (only a page reload re-injects
+// a live script), so every chrome.* entry point below degrades to a no-op
+// instead of throwing — this script wraps the site's own fetch/XHR, and must
+// never break the page it's a guest on.
+function isExtensionAlive() {
+  try {
+    return Boolean(chrome?.runtime?.id);
+  } catch {
+    return false;
+  }
+}
+
 // Utility to get token from extension storage
 function getTokenFromStorage() {
+  if (!isExtensionAlive()) return Promise.resolve(null);
+
   return new Promise((resolve) => {
-    chrome.storage.local.get(
-      [__momentumStorageKeys.TOKEN, __momentumStorageKeys.ACCESS_TOKEN],
-      (result) => {
-        resolve(
-          result[__momentumStorageKeys.TOKEN] ||
-          result[__momentumStorageKeys.ACCESS_TOKEN] ||
-          null
-        );
-      }
-    );
+    try {
+      chrome.storage.local.get(
+        [__momentumStorageKeys.TOKEN, __momentumStorageKeys.ACCESS_TOKEN],
+        (result) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          resolve(
+            result[__momentumStorageKeys.TOKEN] ||
+            result[__momentumStorageKeys.ACCESS_TOKEN] ||
+            null
+          );
+        }
+      );
+    } catch {
+      // An unusable token store must not fail the request being wrapped —
+      // it just means no Authorization header gets added.
+      resolve(null);
+    }
   });
 }
 
@@ -74,11 +100,19 @@ XMLHttpRequest.prototype.send = async function (...args) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function syncAuthWithExtension(token, refreshToken) {
-  chrome.runtime.sendMessage({
-    action: ACTIONS.SYNC_AUTH,
-    token,
-    refreshToken
-  }).catch((err) => console.warn('[Momentum] Failed to sync auth:', err));
+  // sendMessage throws synchronously on an orphaned context, so .catch() alone
+  // (which only handles the returned promise) would let a TypeError escape.
+  if (!isExtensionAlive()) return;
+
+  try {
+    chrome.runtime.sendMessage({
+      action: ACTIONS.SYNC_AUTH,
+      token,
+      refreshToken
+    }).catch((err) => console.warn('[Momentum] Failed to sync auth:', err));
+  } catch (err) {
+    console.warn('[Momentum] Failed to sync auth:', err);
+  }
 }
 
 // 1. Check local storage on load (handles refresh and installation while logged in)
@@ -121,24 +155,33 @@ function announceStatus(status) {
 announceStatus('installed');
 
 function publishStatusAndHealth() {
-  chrome.storage.local.get([__momentumStorageKeys.USER, __momentumStorageKeys.SYNC_STATUS], (result) => {
-    if (chrome.runtime.lastError) return;
-    const isAuthenticated = !!result[__momentumStorageKeys.USER];
-    announceStatus(isAuthenticated ? 'connected' : 'installed');
+  // Orphaned: the baseline 'installed' announce above still stands (the
+  // extension really is installed), we just can't read auth/sync state to
+  // upgrade it to 'connected'. Bail rather than throw at the website.
+  if (!isExtensionAlive()) return;
 
-    const syncStatus = result[__momentumStorageKeys.SYNC_STATUS] || { state: 'Idle', pendingCount: 0 };
-    window.postMessage({
-      type: 'MOMENTUM_EXTENSION_HEALTH',
-      health: {
-        version: __momentumConfig.VERSION,
-        authStatus: isAuthenticated ? 'connected' : 'disconnected',
-        syncState: syncStatus.state,
-        queueSize: syncStatus.pendingCount,
-        lastSuccess: syncStatus.lastSuccess,
-        lastError: syncStatus.lastError
-      }
-    }, '*');
-  });
+  try {
+    chrome.storage.local.get([__momentumStorageKeys.USER, __momentumStorageKeys.SYNC_STATUS], (result) => {
+      if (chrome.runtime.lastError) return;
+      const isAuthenticated = !!result[__momentumStorageKeys.USER];
+      announceStatus(isAuthenticated ? 'connected' : 'installed');
+
+      const syncStatus = result[__momentumStorageKeys.SYNC_STATUS] || { state: 'Idle', pendingCount: 0 };
+      window.postMessage({
+        type: 'MOMENTUM_EXTENSION_HEALTH',
+        health: {
+          version: __momentumConfig.VERSION,
+          authStatus: isAuthenticated ? 'connected' : 'disconnected',
+          syncState: syncStatus.state,
+          queueSize: syncStatus.pendingCount,
+          lastSuccess: syncStatus.lastSuccess,
+          lastError: syncStatus.lastError
+        }
+      }, '*');
+    });
+  } catch {
+    // Context died between the check above and the call — nothing to publish.
+  }
 }
 
 publishStatusAndHealth();
@@ -153,9 +196,17 @@ window.addEventListener('message', (event) => {
 });
 
 // Re-publish whenever the stored auth/sync state changes (login, logout, sync).
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local') return;
-  if (changes[__momentumStorageKeys.USER] || changes[__momentumStorageKeys.SYNC_STATUS]) {
-    publishStatusAndHealth();
+// Registering is itself a chrome.* touch, so it has to tolerate a dead context
+// the same way everything else here does.
+if (isExtensionAlive()) {
+  try {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') return;
+      if (changes[__momentumStorageKeys.USER] || changes[__momentumStorageKeys.SYNC_STATUS]) {
+        publishStatusAndHealth();
+      }
+    });
+  } catch {
+    // No live storage to subscribe to — the baseline announce still stands.
   }
-});
+}

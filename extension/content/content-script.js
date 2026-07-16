@@ -32,12 +32,48 @@ console.log('[Momentum] Content script loaded');
   // toolbar is guaranteed visible) — the accurate "time taken to solve". Reset per problem.
   let capturedTimerSeconds = null;
 
+  let shuttingDown = false;
+
   function log(...args) {
     console.log('[Momentum]', ...args);
   }
 
   function warn(...args) {
     console.warn('[Momentum]', ...args);
+  }
+
+  // Reloading/updating/removing the extension orphans the content scripts
+  // already injected into open tabs: the page keeps running this code but its
+  // chrome.runtime is torn down, so every messaging call throws
+  // "Cannot read properties of undefined (reading 'sendMessage')". Nothing
+  // here can recover — only a page reload re-injects a live script — so detect
+  // it and stop cleanly instead of throwing on a retry loop forever.
+  function isExtensionAlive() {
+    try {
+      return Boolean(chrome?.runtime?.id);
+    } catch {
+      return false;
+    }
+  }
+
+  function shutdown(reason) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    log(`Extension context is gone (${reason}) — this tab's tracking has stopped. Reload the page to resume.`);
+
+    if (observer) observer.disconnect();
+    if (urlPollTimer) clearInterval(urlPollTimer);
+    if (retryTimer) clearTimeout(retryTimer);
+    if (reconcileTimer) clearTimeout(reconcileTimer);
+    if (submissionExpiryTimer) clearTimeout(submissionExpiryTimer);
+
+    observer = null;
+    urlPollTimer = null;
+    retryTimer = null;
+    reconcileTimer = null;
+    submissionExpiryTimer = null;
+    sendInFlight = false;
   }
 
   function getAdapter() {
@@ -565,6 +601,11 @@ console.log('[Momentum] Content script loaded');
       problemKey,
     });
 
+    if (!isExtensionAlive()) {
+      shutdown('solve event could not be sent');
+      return;
+    }
+
     try {
       chrome.runtime.sendMessage({ type: config.MESSAGE_ACTIONS.PROBLEM_SOLVED, data }, (response) => {
         if (chrome.runtime.lastError) {
@@ -595,14 +636,26 @@ console.log('[Momentum] Content script loaded');
         clearProblemSession(problemKey);
       });
     } catch (error) {
-      warn('Solve event send threw:', error);
       sendInFlight = false;
       notifiedKeys.delete(problemKey);
+
+      // A dead context throws here too, and retrying can never succeed.
+      if (!isExtensionAlive()) {
+        shutdown('solve event send threw');
+        return;
+      }
+
+      warn('Solve event send threw:', error);
       scheduleRetry(adapter, problemKey, detection);
     }
   }
 
   function scheduleRetry(adapter, problemKey, detection) {
+    if (shuttingDown || !isExtensionAlive()) {
+      shutdown('retry requested');
+      return;
+    }
+
     if (retryTimer) {
       log('Retry already scheduled:', { problemKey });
       return;
@@ -628,6 +681,15 @@ console.log('[Momentum] Content script loaded');
   }
 
   function handleMutations(mutations) {
+    if (shuttingDown) return;
+
+    // The observer keeps firing on an orphaned script even though nothing it
+    // detects can be reported. Stop at the source rather than downstream.
+    if (!isExtensionAlive()) {
+      shutdown('page still being observed');
+      return;
+    }
+
     if (checkUrlChange('mutation')) return;
 
     const adapter = getAdapter();
@@ -695,6 +757,12 @@ console.log('[Momentum] Content script loaded');
   setTimeout(() => scheduleReconcile('startup check'), TIMING.STARTUP_QUIET_MS);
 
   window.addEventListener('online', () => {
+    if (shuttingDown) return;
+    if (!isExtensionAlive()) {
+      shutdown('network restored');
+      return;
+    }
+
     log('Network restored (online), requesting queue flush...');
     try {
       chrome.runtime.sendMessage({ type: config.MESSAGE_ACTIONS.FLUSH_QUEUE });
