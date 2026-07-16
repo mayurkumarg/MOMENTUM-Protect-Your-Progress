@@ -106,6 +106,9 @@ console.log('[Momentum] Content script loaded');
   // sessions still measures from the true first visit.
   async function ensureProblemSession(problemKey) {
     if (!problemKey) return;
+    // chrome.storage throws "Extension context invalidated" once orphaned.
+    // Nothing to record, and no point warning about it on every mutation.
+    if (!isExtensionAlive()) return;
     try {
       const storageKey = config.STORAGE_KEYS.PROBLEM_SESSIONS;
       const result = await chrome.storage.local.get([storageKey]);
@@ -161,6 +164,7 @@ console.log('[Momentum] Content script loaded');
   // fabricated one.
   async function computeDurationMinutes(problemKey) {
     const fallbackMinutes = clampDuration(Math.round((Date.now() - pageLoadedAt) / 60000));
+    if (!isExtensionAlive()) return fallbackMinutes;
     try {
       const storageKey = config.STORAGE_KEYS.PROBLEM_SESSIONS;
       const result = await chrome.storage.local.get([storageKey]);
@@ -175,6 +179,7 @@ console.log('[Momentum] Content script loaded');
   }
 
   async function clearProblemSession(problemKey) {
+    if (!isExtensionAlive()) return;
     try {
       const storageKey = config.STORAGE_KEYS.PROBLEM_SESSIONS;
       const result = await chrome.storage.local.get([storageKey]);
@@ -225,7 +230,16 @@ console.log('[Momentum] Content script loaded');
     scheduleReconcile('url reset');
   }
 
+  // Every URL-change route funnels through here — popstate, hashchange, the
+  // url poll interval, and handleMutations — and resetForUrlChange touches
+  // chrome.storage downstream. Guarding here covers all four at once.
   function checkUrlChange(reason) {
+    if (shuttingDown) return false;
+    if (!isExtensionAlive()) {
+      shutdown(`url change (${reason})`);
+      return false;
+    }
+
     if (window.location.href !== lastUrl) {
       resetForUrlChange(reason);
       return true;
