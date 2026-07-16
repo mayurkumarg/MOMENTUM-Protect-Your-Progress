@@ -21,6 +21,16 @@ export function isTokenExpired(token) {
   return payload.exp * 1000 <= Date.now()
 }
 
+// True once `token` is within `withinMs` of expiring (or already expired), so
+// a session can be renewed *before* it lapses instead of after — waiting for
+// actual expiry leaves a window where in-flight requests fail with a 401.
+export function isTokenExpiringSoon(token, withinMs = 0) {
+  const payload = decodeJwtPayload(token)
+  if (!payload?.exp) return false
+
+  return payload.exp * 1000 - Date.now() <= withinMs
+}
+
 export function getTokenUser(token) {
   const payload = decodeJwtPayload(token)
   if (!payload) return null

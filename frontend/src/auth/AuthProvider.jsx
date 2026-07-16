@@ -1,9 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { clearStoredAuth, getStoredRefreshToken, getStoredToken, setTokenProvider, setUnauthorizedHandler, storeRefreshToken, storeToken, setRefreshHandler } from '../api/client'
 import { refreshToken as refreshAccessToken, getCurrentUser } from '../api/auth'
-import { getTokenUser, isTokenExpired } from './token'
+import { getTokenUser, isTokenExpired, isTokenExpiringSoon } from './token'
 
 const AuthContext = createContext(null)
+
+// Renew the access token this long before it actually expires, so a request
+// never goes out holding a token that lapses in transit.
+const REFRESH_LEAD_MS = 2 * 60 * 1000
+const REFRESH_CHECK_INTERVAL_MS = 30 * 1000
 
 function readInitialAuth() {
   const url = new URL(window.location.href)
@@ -21,13 +26,23 @@ function readInitialAuth() {
   }
 
   const token = tokenFromUrl || getStoredToken()
+  const refreshToken = getStoredRefreshToken()
 
-  if (!token || isTokenExpired(token)) {
-    clearStoredAuth()
-    return { token: null, user: null, status: 'unauthenticated' }
+  if (token && !isTokenExpired(token)) {
+    return { token, user: getTokenUser(token), status: 'authenticated', needsRefresh: false }
   }
 
-  return { token, user: getTokenUser(token), status: 'authenticated' }
+  // The access token is short-lived (15m) but the refresh token behind it is
+  // good for 30 days. An aged-out access token therefore says nothing about
+  // whether the session is over — redeem the refresh token instead. Clearing
+  // it here (as this used to) threw away a live session on the first reload
+  // after 15 minutes, which is why logins never survived a refresh/restart.
+  if (refreshToken && !isTokenExpired(refreshToken)) {
+    return { token: null, user: null, status: 'loading', needsRefresh: true }
+  }
+
+  clearStoredAuth()
+  return { token: null, user: null, status: 'unauthenticated', needsRefresh: false }
 }
 
 export function AuthProvider({ children }) {
@@ -82,13 +97,30 @@ export function AuthProvider({ children }) {
     setTokenProvider(() => getStoredToken())
     setUnauthorizedHandler(() => signOut('expired'))
     setRefreshHandler(refreshSession)
-    setAuth({ ...readInitialAuth(), reason: null })
 
+    // Cross-tab sync. Note a sibling tab rotating its access token fires this
+    // too, so "the token changed" must not be read as "the session ended" —
+    // only the tokens actually being gone means someone signed out.
     const onStorage = (event) => {
       if (event.key !== 'momentum-token') return
+
       const token = getStoredToken()
-      if (!token || isTokenExpired(token)) signOut('expired')
-      else setAuth({ token, user: getTokenUser(token), status: 'authenticated', reason: null })
+      if (!token) {
+        if (!getStoredRefreshToken()) signOut('cleared')
+        return
+      }
+      if (isTokenExpired(token)) return
+
+      // Keep the existing user object: it came from /auth/me and carries
+      // username/email, whereas getTokenUser only yields {id, githubId} —
+      // overwriting it blanks the avatar into the "?" ghost-session state.
+      setAuth((current) => ({
+        ...current,
+        token,
+        user: current.user || getTokenUser(token),
+        status: 'authenticated',
+        reason: null,
+      }))
     }
 
     window.addEventListener('storage', onStorage)
@@ -100,52 +132,93 @@ export function AuthProvider({ children }) {
 
     async function initializeAuth() {
       const initial = readInitialAuth()
-      
-      if (initial.status === 'authenticated') {
+
+      if (initial.needsRefresh) {
+        // Access token aged out while away, but the refresh token is still
+        // live — redeem it so the session survives reloads and restarts.
         try {
-          const userData = await getCurrentUser()
-          setAuth({
-            token: initial.token,
-            user: userData,
-            status: 'authenticated',
-            reason: null
-          })
+          await refreshSession()
         } catch (err) {
-          // The token decoded fine (right shape, not expired) but the backend
-          // couldn't verify it — most commonly the user it points to no
-          // longer exists (e.g. deleted account, wiped dev DB). Falling back
-          // to the token-only placeholder here would leave the app stuck
-          // "authenticated" with a user object that has no username/email
-          // (see token.js getTokenUser), which is exactly the "?" ghost
-          // session bug. Any failure to verify means: not a real session.
-          console.error('Failed to fetch current user:', err)
-          signOut('invalid')
+          // Only a refusal means the session is really over; a network blip
+          // must not sign the user out and discard a valid refresh token.
+          if (err?.status === 401) signOut('expired')
+          else setAuth({ token: null, user: null, status: 'unauthenticated', reason: null })
+          return
         }
-      } else {
-        setAuth(initial)
+      } else if (initial.status !== 'authenticated') {
+        setAuth({ token: null, user: null, status: 'unauthenticated', reason: null })
+        return
+      }
+
+      try {
+        const userData = await getCurrentUser()
+        setAuth({
+          token: getStoredToken(),
+          user: userData,
+          status: 'authenticated',
+          reason: null,
+        })
+      } catch (err) {
+        // The token verified as well-formed but the backend rejected it. A
+        // 401/404 means it points at nothing real (e.g. deleted account,
+        // wiped dev DB): falling back to the token-only placeholder would
+        // leave the app stuck "authenticated" with a user that has no
+        // username/email (see token.js getTokenUser) — the "?" ghost session.
+        // Anything else (offline, backend down) is transient and must not
+        // destroy a valid stored session.
+        console.error('Failed to fetch current user:', err)
+        if (err?.status === 401 || err?.status === 404) signOut('invalid')
+        else setAuth({ token: null, user: null, status: 'unauthenticated', reason: null })
       }
     }
 
     initializeAuth()
-  }, [signOut])
+  }, [signOut, refreshSession])
 
   useEffect(() => {
-    if (!auth.token || auth.status !== 'authenticated') return undefined
+    if (auth.status !== 'authenticated') return undefined
 
-    // The access token is short-lived by design (e.g. 15m) and refreshed
-    // transparently on the next API call — but a user who's just reading a
-    // page, not calling the API, never hits that path. Without attempting a
-    // refresh here first, this watchdog would sign them out the moment the
-    // access token's clock runs out even though their refresh token (valid
-    // for weeks) could have silently renewed the session.
-    const timer = setInterval(() => {
-      if (isTokenExpired(auth.token)) {
-        refreshSession().catch(() => signOut('expired'))
+    // The access token is short-lived by design (15m) and the refresh token
+    // behind it lasts 30 days, so keeping someone signed in just means
+    // redeeming the latter before the former lapses. Renew EARLY rather than
+    // on expiry: waiting until it has already expired leaves a gap where
+    // in-flight requests 401.
+    let inFlight = false
+
+    const renewIfNeeded = async () => {
+      if (inFlight) return
+      const token = getStoredToken()
+      if (token && !isTokenExpiringSoon(token, REFRESH_LEAD_MS)) return
+
+      inFlight = true
+      try {
+        await refreshSession()
+      } catch (err) {
+        // Only a rejected refresh token ends the session. Anything else
+        // (offline, server hiccup) leaves it intact to retry on the next tick.
+        if (err?.status === 401) signOut('expired')
+      } finally {
+        inFlight = false
       }
-    }, 30000)
+    }
 
-    return () => clearInterval(timer)
-  }, [auth.token, auth.status, signOut, refreshSession])
+    // Timers are throttled in background tabs, so a tab left open for hours
+    // can come back with a long-expired token — re-check on the way back in.
+    const onFocus = () => renewIfNeeded()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') renewIfNeeded()
+    }
+
+    const timer = setInterval(renewIfNeeded, REFRESH_CHECK_INTERVAL_MS)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [auth.status, signOut, refreshSession])
 
   const value = useMemo(() => ({
     ...auth,

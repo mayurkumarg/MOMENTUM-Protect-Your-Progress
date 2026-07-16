@@ -6,6 +6,11 @@ const userService = require('../user/user.service');
 const githubService = require('./github.service');
 const githubIntegrationService = require('../github/github.service');
 
+// How long a rotated refresh token stays redeemable after being replaced.
+// Long enough to absorb two clients racing to refresh the same token, short
+// enough that a leaked token is still effectively single-use.
+const REFRESH_ROTATION_GRACE_MS = 60 * 1000;
+
 const signAccessToken = (userId) =>
   jwt.sign(
     { userId },
@@ -244,7 +249,10 @@ const refreshAccessToken = async (refreshToken) => {
 
     // Rotate: retire the used refresh token and issue a new one, so a given
     // refresh token is single-use — reduces the blast radius of a leaked token.
-    await userService.removeRefreshToken(user._id, refreshToken);
+    // Retired rather than deleted so it keeps working for REFRESH_ROTATION_GRACE_MS:
+    // the web app and the extension share one refresh token and redeem it
+    // concurrently, and deleting on first use logs the slower one out.
+    await userService.retireRefreshToken(user._id, refreshToken, REFRESH_ROTATION_GRACE_MS);
 
     const newAccessToken = signAccessToken(user._id.toString());
     const newRefreshToken = signRefreshToken(user._id.toString());

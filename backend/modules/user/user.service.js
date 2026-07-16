@@ -91,6 +91,21 @@ const removeRefreshToken = async (userId, token) => {
   return RefreshToken.deleteOne({ userId, tokenHash: hashToken(token) });
 };
 
+// Retire a rotated refresh token by expiring it shortly, rather than deleting
+// it outright. The web app and the browser extension each hold a copy of the
+// same refresh token and can redeem it at the same moment; deleting on the
+// first redemption means the second one 401s and that client gets logged out
+// mid-session. The grace window lets the loser of that race through.
+// Never extends a token that already expires sooner than the window.
+const retireRefreshToken = async (userId, token, graceMs) => {
+  const graceExpiry = new Date(Date.now() + graceMs);
+
+  return RefreshToken.updateOne(
+    { userId, tokenHash: hashToken(token), expiresAt: { $gt: graceExpiry } },
+    { $set: { expiresAt: graceExpiry } }
+  );
+};
+
 const removeAllRefreshTokens = async (userId) => {
   return RefreshToken.deleteMany({ userId });
 };
@@ -146,6 +161,7 @@ module.exports = {
   addRefreshToken,
   findUserByRefreshToken,
   removeRefreshToken,
+  retireRefreshToken,
   removeAllRefreshTokens,
   updateEmail,
   updateNotificationPreferences,

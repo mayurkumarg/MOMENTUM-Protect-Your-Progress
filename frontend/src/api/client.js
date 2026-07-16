@@ -112,17 +112,20 @@ async function parseResponse(response) {
 let isRefreshing = false
 let refreshPromise = null
 
+// Resolves { ok, unauthorized }. `unauthorized` is only true when the server
+// actually rejected the refresh token — a network failure must not be read as
+// "session over" and log the user out.
 async function refreshAccessToken() {
   if (isRefreshing) return refreshPromise
 
   isRefreshing = true
   refreshPromise = (async () => {
     try {
-      if (!refreshHandler) return false
+      if (!refreshHandler) return { ok: false, unauthorized: true }
       await refreshHandler()
-      return true
-    } catch {
-      return false
+      return { ok: true, unauthorized: false }
+    } catch (err) {
+      return { ok: false, unauthorized: err instanceof ApiError && err.status === 401 }
     } finally {
       isRefreshing = false
       refreshPromise = null
@@ -132,7 +135,7 @@ async function refreshAccessToken() {
   return refreshPromise
 }
 
-export async function apiRequest(path, { method = 'GET', params, body, headers = {}, auth = true } = {}) {
+export async function apiRequest(path, { method = 'GET', params, body, headers = {}, auth = true, isRetry = false } = {}) {
   try {
     const token = tokenProvider()
     const url = buildUrl(path, params)
@@ -151,12 +154,16 @@ export async function apiRequest(path, { method = 'GET', params, body, headers =
     const payload = await parseResponse(response)
 
     if (!response.ok) {
-      if (response.status === 401 && auth) {
-        const refreshed = await refreshAccessToken()
-        if (refreshed) {
-          return apiRequest(path, { method, params, body, headers, auth })
+      // `isRetry` stops a token that 401s even when freshly minted from
+      // looping refresh → retry → refresh forever.
+      if (response.status === 401 && auth && !isRetry) {
+        const { ok, unauthorized } = await refreshAccessToken()
+        if (ok) {
+          return apiRequest(path, { method, params, body, headers, auth, isRetry: true })
         }
-        unauthorizedHandler(new ApiError('Unauthorized', { status: 401, details: payload }))
+        if (unauthorized) {
+          unauthorizedHandler(new ApiError('Unauthorized', { status: 401, details: payload }))
+        }
       }
 
       const message = payload?.message || payload?.error || 'Momentum could not complete that request.'
