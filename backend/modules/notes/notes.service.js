@@ -1,11 +1,10 @@
-const fs = require('fs');
-const path = require('path');
 const mongoose = require('mongoose');
 const Note = require('./notes.model');
 const Task = require('../task/task.model');
 const Company = require('../companies/company.model');
 const AppError = require('../../utils/AppError');
-const { UPLOAD_ROOT, MAX_ATTACHMENTS_PER_NOTE } = require('./upload.middleware');
+const { MAX_ATTACHMENTS_PER_NOTE } = require('./upload.middleware');
+const attachmentStorage = require('./attachment.storage');
 
 const { NOTE_ENTITY_TYPE } = Note;
 
@@ -26,9 +25,9 @@ const assertAllowedUpdates = (updates) => {
   }
 };
 
-// Never exposes storedName — that's the on-disk secret that makes the
-// randomized filename scheme meaningful; the client only ever sees the
-// attachment's Mongo _id (used to build the authenticated download URL).
+// Never exposes fileId — that's the internal GridFS pointer; the client only
+// ever sees the attachment's Mongo _id (used to build the authenticated
+// download URL, which resolves fileId server-side).
 const serializeNote = (note) => {
   const noteObject = note.toJSON ? note.toJSON() : note;
 
@@ -154,16 +153,14 @@ const updateNote = async (userId, noteId, updates) => {
   return serializeNote(note);
 };
 
-// Best-effort disk cleanup — a stray file left behind by a failed unlink is
-// harmless clutter, but we still surface a log so it isn't silently lost.
+// Best-effort GridFS cleanup — a stray file left behind by a failed delete is
+// harmless clutter (attachment.storage swallows FileNotFound and logs the rest).
+// Runs after the note is already gone, so a cleanup failure never blocks a delete.
 const removeAttachmentFiles = (attachments) => {
   for (const attachment of attachments) {
-    const filePath = path.join(UPLOAD_ROOT, attachment.storedName);
-    fs.unlink(filePath, (error) => {
-      if (error && error.code !== 'ENOENT') {
-        console.error(`[notes] failed to remove attachment file ${attachment.storedName}:`, error.message);
-      }
-    });
+    if (attachment.fileId) {
+      attachmentStorage.deleteFile(attachment.fileId).catch(() => {});
+    }
   }
 };
 
@@ -188,26 +185,38 @@ const deleteAllForEntity = async (userId, entityType, entityId) => {
 const addAttachment = async (userId, noteId, file) => {
   const note = await findOwnedNote(userId, noteId);
 
+  // The file is only buffered in memory at this point (multer memoryStorage),
+  // so an over-limit upload is simply not persisted — nothing to clean up.
   if (note.attachments.length >= MAX_ATTACHMENTS_PER_NOTE) {
-    // multer already wrote the file to disk before this controller code runs
-    // — clean it up since it's not going to be attached.
-    fs.unlink(file.path, () => {});
     throw new AppError(`A note can have at most ${MAX_ATTACHMENTS_PER_NOTE} attachments.`, 400);
   }
 
+  const fileId = await attachmentStorage.uploadBuffer(file.buffer, {
+    filename: file.originalname,
+    mimeType: file.mimetype,
+  });
+
   note.attachments.push({
     filename: file.originalname,
-    storedName: file.filename,
+    fileId,
     mimeType: file.mimetype,
     size: file.size,
   });
 
-  await note.save();
+  try {
+    await note.save();
+  } catch (error) {
+    // The GridFS bytes are already written; if attaching them to the note
+    // fails (validation, concurrent delete), remove the orphan rather than
+    // leaking storage.
+    attachmentStorage.deleteFile(fileId).catch(() => {});
+    throw error;
+  }
 
   return serializeNote(note);
 };
 
-// Returns the raw attachment subdoc (with storedName) for the controller's
+// Returns the raw attachment subdoc (with fileId) for the controller's
 // streaming download — internal use only, never passed through serializeNote.
 const getOwnedAttachment = async (userId, noteId, attachmentId) => {
   const note = await findOwnedNote(userId, noteId);

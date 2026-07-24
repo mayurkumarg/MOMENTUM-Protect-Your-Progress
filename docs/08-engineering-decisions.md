@@ -267,8 +267,7 @@ Every row is a place where the *simpler-to-build* option was rejected for a *har
 
 1. **The schedulers.** Two API instances would double-send reminders. *Fix: leader election or an external queue.* This is the first real blocker to horizontal scaling.
 2. **Per-request analytics.** O(records in window) is fine at hundreds of activities, not at hundreds of thousands. *Fix: materialised daily rollups.*
-3. **Note attachments on local disk.** Already broken in production (§8).
-4. **The per-user in-memory sync queue.** Doesn't coordinate across instances. *Fix: distributed lock.*
+3. **The per-user in-memory sync queue.** Doesn't coordinate across instances. *Fix: distributed lock.*
 
 **The honest framing:** none of these are wrong for a single-user-per-account product with one API instance. They are documented so that revisiting them is a *deliberate decision* rather than an emergency.
 
@@ -298,7 +297,6 @@ Stated plainly. An honest accounting is more useful than a clean one.
 
 | Limitation | Severity | Notes |
 |---|---|---|
-| **Note attachments on ephemeral disk** | **High** | Render's filesystem resets on deploy; files vanish while metadata survives in Mongo. The code comment still claims *"no production deployment yet."* |
 | **No automated tests** | **High** | CI verifies parse/build/containerise, not behaviour |
 | Single-instance schedulers | Medium | Blocks horizontal scaling |
 | DOM-coupled detection | Medium | Inherent; contained to one adapter file |
@@ -313,7 +311,7 @@ Stated plainly. An honest accounting is more useful than a clean one.
 
 Not speculation — these are the extension points the architecture already anticipates.
 
-**Immediate (production correctness).** Persistent storage for attachments; a test suite starting with the pure functions (`workload.service`, `dateStats`, `journal.js` — all trivially testable) and adapter tests against captured HTML fixtures.
+**Immediate (production correctness).** A test suite starting with the pure functions (`workload.service`, `dateStats`, `journal.js` — all trivially testable) and adapter tests against captured HTML fixtures. (Persistent attachment storage was on this list and is now done — moved from local disk to GridFS.)
 
 **Near-term (the code is shaped for it).** More platforms — one adapter file each. More assistant context — the Placement Tracker was added by extending *one function*, exactly as the AI planning doc predicted. Chrome Web Store distribution, which the build pipeline already produces a package for.
 
@@ -349,7 +347,7 @@ Not speculation — these are the extension points the architecture already anti
 
 - **Set production-realistic config from day one.** Short token lifetimes, strict secrets, real CORS. Most of the deployment-era bug cluster would never have existed.
 - **Write the pure functions test-first.** `workload.service`, `dateStats`, and `journal.js` have no I/O and clear contracts. That's the cheapest possible coverage and it was skipped.
-- **Choose object storage for uploads immediately.** The local-disk decision was reasonable when nothing was deployed, and became wrong the moment something was — silently.
+- **Choose persistent upload storage from day one.** The local-disk decision was reasonable when nothing was deployed and became wrong the moment something was — silently. Now on GridFS; the lesson is to not let "no deployment yet" justify a choice that a deployment will break.
 - **Keep everything else.** The layered detection, the passive-capture constraint, the CAG-over-RAG call, the adapter pattern, the computed-reads model, and the four-dependency frontend all held up under real use.
 
 ---

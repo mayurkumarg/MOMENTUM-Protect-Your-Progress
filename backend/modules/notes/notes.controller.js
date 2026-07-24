@@ -1,6 +1,5 @@
-const path = require('path');
 const notesService = require('./notes.service');
-const { UPLOAD_ROOT } = require('./upload.middleware');
+const attachmentStorage = require('./attachment.storage');
 const AppError = require('../../utils/AppError');
 
 const createNote = async (req, res, next) => {
@@ -68,15 +67,28 @@ const sanitizeForHeader = (value) => value.replace(/[^\x20-\x7E]/g, '').replace(
 const downloadAttachment = async (req, res, next) => {
   try {
     const attachment = await notesService.getOwnedAttachment(req.user.userId, req.params.id, req.params.attachmentId);
-    const filePath = path.join(UPLOAD_ROOT, attachment.storedName);
+
+    if (!attachment.fileId) {
+      // A legacy disk-stored record (pre-GridFS); its bytes no longer exist on
+      // the current deployment's ephemeral filesystem.
+      throw new AppError('This attachment is no longer available. Please re-upload it.', 404);
+    }
+
+    const fileStream = attachmentStorage.openDownloadStream(attachment.fileId);
+
+    // The stream errors asynchronously if the GridFS file is missing — surface
+    // a 404 only while we still own the response (nothing streamed yet).
+    fileStream.on('error', () => {
+      if (!res.headersSent) {
+        next(new AppError('Attachment file could not be found on the server.', 404));
+      } else {
+        res.destroy();
+      }
+    });
 
     res.setHeader('Content-Type', attachment.mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizeForHeader(attachment.filename)}"`);
-    res.sendFile(filePath, (error) => {
-      if (error && !res.headersSent) {
-        next(new AppError('Attachment file could not be found on the server.', 404));
-      }
-    });
+    fileStream.pipe(res);
   } catch (error) {
     next(error);
   }

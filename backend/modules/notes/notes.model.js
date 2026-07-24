@@ -48,9 +48,10 @@ const linkSchema = new Schema(
   { timestamps: false }
 );
 
-// `filename` is a display-only label — it must NEVER be used to build a
-// filesystem path (see upload.middleware.js). `storedName` is the randomized
-// on-disk name that actually locates the file.
+// `filename` is a display-only label — it is never used to locate the file.
+// `fileId` is the GridFS file's ObjectId, the actual pointer to the stored
+// bytes (see attachment.storage.js). `storedName` is a legacy disk name kept
+// optional only so pre-GridFS records still validate; new uploads never set it.
 const attachmentSchema = new Schema(
   {
     filename: {
@@ -59,9 +60,11 @@ const attachmentSchema = new Schema(
       trim: true,
       maxlength: [255, 'Filename must be at most 255 characters.'],
     },
+    fileId: {
+      type: Schema.Types.ObjectId,
+    },
     storedName: {
       type: String,
-      required: true,
     },
     mimeType: {
       type: String,

@@ -137,7 +137,7 @@ One model, one service, one set of endpoints serving three surfaces. Adding a fo
 - **`image/svg+xml` is deliberately excluded**, because an SVG can carry embedded `<script>` — a stored-XSS vector even when served as a download.
 - **Filenames are randomised** with `crypto.randomBytes(16)`, so the user's original filename never touches a filesystem path. This eliminates path traversal outright rather than trying to sanitise it.
 
-> ⚠️ **Known production gap.** Attachments are written to local disk. Render's filesystem is ephemeral, so uploaded files are lost on every deploy or restart while their metadata remains in MongoDB. Docker Compose handles this with a named volume; production needs a persistent disk or object storage. The code comment still says *"this project has no production deployment yet"* — a premise that is now false.
+**Storage — GridFS on the same database.** Attachment bytes are streamed into **GridFS** on the existing MongoDB, not written to local disk. This was a deliberate change: the deployment target (Render) has an ephemeral filesystem, so disk-stored uploads vanished on every deploy or restart while their metadata survived in the notes collection, leaving broken download links. GridFS chunks each file across a dedicated collection (so it handles the 15 MB cap despite the 16 MB BSON document limit) and persists exactly as long as the note that references it. Upload buffers the file in memory and streams it into GridFS under a server-generated ObjectId; download streams it back; deleting a note or attachment removes the GridFS file and its chunks.
 
 ---
 
@@ -428,7 +428,7 @@ No calendar endpoint, no calendar collection, no sync logic. The calendar is a *
 | Assistant | **Production** | Requires `GROQ_API_KEY`; degrades cleanly without |
 | Placements, Calendar | **Production** | Fully wired into tasks, notes, reminders |
 | Reminders | **Production** | In-app cannot wake a closed tab — by design |
-| Notes **attachments** | ⚠️ **At risk in prod** | Ephemeral filesystem on Render; needs persistent disk or object storage |
+| Notes **attachments** | **Production** | Stored in GridFS on the same database; persist across deploys |
 
 **Cross-cutting gaps**, stated plainly: there is **no automated test suite** (CI syntax-checks, builds, and containerises — it does not verify behaviour); the background schedulers assume a **single API instance** and would need an external queue or leader election to scale horizontally; and detection adapters are inherently coupled to seven third-party DOMs that can change without warning.
 

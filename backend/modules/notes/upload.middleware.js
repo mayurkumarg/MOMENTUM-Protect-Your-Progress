@@ -1,14 +1,10 @@
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
 const multer = require('multer');
 
-// Local disk storage — this project has no production deployment yet
-// (everything runs on localhost), so cloud object storage would be new
-// infra nobody asked for. Files live outside the repo's tracked content
-// (see .gitignore: backend/uploads/).
-const UPLOAD_ROOT = path.join(__dirname, '..', '..', 'uploads', 'notes');
-fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+// Uploads are held in memory only, then streamed into GridFS by the notes
+// service (see attachment.storage.js) — nothing is ever written to local disk.
+// The deployment target's filesystem is ephemeral, so disk storage would lose
+// every file on each deploy/restart. The 15MB cap below keeps a single buffered
+// upload small enough to hold in memory safely.
 
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
 const MAX_ATTACHMENTS_PER_NOTE = 10;
@@ -31,18 +27,11 @@ const ALLOWED_MIME_EXTENSIONS = {
   'text/plain': '.txt',
 };
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, UPLOAD_ROOT);
-  },
-  // Randomized name — the original filename is never interpolated into a
-  // filesystem path, which eliminates path-traversal risk outright rather
-  // than relying on sanitizing user input.
-  filename(req, file, cb) {
-    const ext = ALLOWED_MIME_EXTENSIONS[file.mimetype] || '';
-    cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`);
-  },
-});
+// Buffer the upload in memory; the notes service streams it into GridFS under a
+// server-generated ObjectId, so the user's original filename is never used to
+// build any storage path (GridFS or otherwise) — path traversal stays
+// impossible, the same guarantee the old randomized disk name provided.
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   if (!ALLOWED_MIME_EXTENSIONS[file.mimetype]) {
@@ -63,7 +52,6 @@ const upload = multer({
 
 module.exports = {
   upload,
-  UPLOAD_ROOT,
   MAX_FILE_SIZE_BYTES,
   MAX_ATTACHMENTS_PER_NOTE,
   ALLOWED_MIME_EXTENSIONS,

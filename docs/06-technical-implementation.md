@@ -418,13 +418,11 @@ Stated plainly, because an honest accounting is more useful than a clean one.
 | Issue | Impact | Fix |
 |---|---|---|
 | **No automated tests** | CI verifies parse/build/containerise, not behaviour | Highest value: adapter tests against captured HTML fixtures; unit tests for `workload.service` and `dateStats` (pure functions, trivial to test) |
-| **Attachments on ephemeral disk** | Files lost on every Render deploy; metadata orphaned in Mongo | Persistent disk, or object storage |
 | **Single-instance schedulers** | Cannot scale horizontally | External queue or leader election |
 | **Analytics computed per request** | Fine now; O(records) per call | Materialised daily rollups if volume grows |
 | **DOM-coupled detection** | A judge's redesign breaks that adapter | Inherent to the problem; damage contained to one file |
-| **Stale code comment** | `upload.middleware.js` says "no production deployment yet" — no longer true | One-line correction |
 
-The first two are the ones that would matter to a reviewer. The rest are conscious trade-offs appropriate to current scale, documented so that the decision to revisit them is deliberate rather than forced.
+**No automated tests** is the one that would matter to a reviewer. The rest are conscious trade-offs appropriate to current scale, documented so that the decision to revisit them is deliberate rather than forced. (Note-attachment storage *was* on this list — files were written to Render's ephemeral disk and lost on every deploy — and has since been moved to GridFS on the same database; see Phase 5.)
 
 ---
 
